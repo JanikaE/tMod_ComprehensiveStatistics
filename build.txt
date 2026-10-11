@@ -1,0 +1,3 @@
+displayName = Comprehensive Statistics综合统计
+author = Janika
+version = 0.1

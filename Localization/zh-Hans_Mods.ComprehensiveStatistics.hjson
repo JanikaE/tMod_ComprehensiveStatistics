@@ -1,0 +1,28 @@
+Keybinds.ToggleStatistics.DisplayName: 打开或关闭统计窗口
+
+UI: {
+	WindowTitle: 综合统计
+	EmptyWindow: 统计分类将在下一开发步骤中加入。
+	OpenButtonTooltip:
+		'''
+		综合统计
+		按住右键可拖动此按钮
+		'''
+	CloseButtonTooltip: 关闭
+}
+
+Configs: {
+	ClientConfig: {
+		DisplayName: 客户端设置
+
+		InventoryButtonHorizontal: {
+			Label: 入口按钮水平位置
+			Tooltip: 使用鼠标右键移动按钮后自动保存。
+		}
+
+		InventoryButtonVertical: {
+			Label: 入口按钮垂直位置
+			Tooltip: 使用鼠标右键移动按钮后自动保存。
+		}
+	}
+}

@@ -1,0 +1,28 @@
+Keybinds.ToggleStatistics.DisplayName: Toggle statistics window
+
+UI: {
+	WindowTitle: Comprehensive Statistics
+	EmptyWindow: Statistics categories will be added in the next development step.
+	OpenButtonTooltip:
+		'''
+		Comprehensive Statistics
+		Hold right-click to drag this button
+		'''
+	CloseButtonTooltip: Close
+}
+
+Configs: {
+	ClientConfig: {
+		DisplayName: Client settings
+
+		InventoryButtonHorizontal: {
+			Label: Entry button horizontal position
+			Tooltip: Saved automatically when the button is moved with the right mouse button.
+		}
+
+		InventoryButtonVertical: {
+			Label: Entry button vertical position
+			Tooltip: Saved automatically when the button is moved with the right mouse button.
+		}
+	}
+}
