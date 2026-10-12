@@ -4,12 +4,16 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Terraria;
 using Terraria.Audio;
+using Terraria.GameInput;
 using Terraria.ID;
 using Terraria.ModLoader;
 using Terraria.UI;
 
 namespace ComprehensiveStatistics.Common.Systems
 {
+    /// <summary>
+    /// 统一管理物品栏入口和统计窗口的生命周期、输入与绘制层。
+    /// </summary>
     [Autoload(Side = ModSide.Client)]
     internal sealed class StatisticsUISystem : ModSystem
     {
@@ -17,11 +21,15 @@ namespace ComprehensiveStatistics.Common.Systems
         private UserInterface statisticsWindowInterface;
         private InventoryStatisticsButtonState inventoryButtonState;
         private StatisticsWindowState statisticsWindowState;
+        private int selectedItemBeforeOpen;
 
         internal bool IsOpen => statisticsWindowInterface?.CurrentState != null;
 
+        internal bool IsTakingTextInput => IsOpen && statisticsWindowState.IsWritingSearchText;
+
         public override void Load()
         {
+            // 两套 UserInterface 分开管理，避免入口按钮与模态窗口互相影响状态。
             inventoryButtonState = new InventoryStatisticsButtonState();
             inventoryButtonState.Activate();
             inventoryButtonInterface = new UserInterface();
@@ -65,6 +73,7 @@ namespace ComprehensiveStatistics.Common.Systems
             }
 
             Main.playerInventory = false;
+            selectedItemBeforeOpen = Main.LocalPlayer.selectedItem;
             statisticsWindowInterface.SetState(statisticsWindowState);
             SoundEngine.PlaySound(SoundID.MenuOpen);
         }
@@ -88,9 +97,10 @@ namespace ComprehensiveStatistics.Common.Systems
         {
             if (IsOpen)
             {
-                // Escape is handled here so it closes this modal instead of opening
-                // the vanilla inventory on the same frame.
-                if (Main.keyState.IsKeyDown(Keys.Escape) && Main.oldKeyState.IsKeyUp(Keys.Escape))
+                // 在这里接管 Esc，避免关闭模态窗口的同一帧又打开原版物品栏。
+                if (Main.keyState.IsKeyDown(Keys.Escape)
+                    && Main.oldKeyState.IsKeyUp(Keys.Escape)
+                    && !statisticsWindowState.IsWritingSearchText)
                 {
                     Close();
                     Main.playerInventory = false;
@@ -99,6 +109,11 @@ namespace ComprehensiveStatistics.Common.Systems
 
                 Main.playerInventory = false;
                 statisticsWindowInterface.Update(gameTime);
+
+                // 统计列表已经消费滚轮输入，不能再让同一输入切换原版快捷栏。
+                Main.LocalPlayer.selectedItem = selectedItemBeforeOpen;
+                PlayerInput.ScrollWheelDeltaForUI = 0;
+                PlayerInput.ScrollWheelDelta = 0;
                 return;
             }
 
@@ -108,8 +123,22 @@ namespace ComprehensiveStatistics.Common.Systems
             }
         }
 
+        public override void PostUpdateInput()
+        {
+            if (!IsOpen || Main.gameMenu)
+            {
+                return;
+            }
+
+            // 此回调位于输入轮询之后、游戏逻辑消费之前。保留 UI 专用滚轮值供列表
+            // 使用，只清除游戏滚轮值，并恢复打开窗口前的快捷栏槽位作为双重保护。
+            PlayerInput.ScrollWheelDelta = 0;
+            Main.LocalPlayer.selectedItem = selectedItemBeforeOpen;
+        }
+
         public override void ModifyInterfaceLayers(List<GameInterfaceLayer> layers)
         {
+            // 插在鼠标提示层之前，使窗口覆盖世界界面，同时仍允许提示文本显示在最上方。
             int mouseTextIndex = layers.FindIndex(layer => layer.Name == "Vanilla: Mouse Text");
             if (mouseTextIndex < 0)
             {

@@ -9,6 +9,87 @@ UI: {
 		Hold right-click to drag this button
 		'''
 	CloseButtonTooltip: Close
+
+	Tabs: {
+		Overview: {
+			Title: Overview
+			Description: Representative totals and frequently used summaries will appear here.
+		}
+
+		Blocks: {
+			Title: Blocks
+			Description: Block, wall, furniture, and multi-tile removal statistics will appear here.
+		}
+
+		Items: {
+			Title: Items
+			Description: Item pickup and item use statistics will appear here.
+		}
+
+		Interactions: {
+			Title: Interactions
+			Description: Buff station, furniture, container, pylon, clock, and mechanism interactions will appear here.
+		}
+
+		NPCs: {
+			Title: NPCs
+			Description: NPC conversations, kills, assists, and world deaths will appear here.
+		}
+
+		Economy: {
+			Title: Economy
+			Description: Purchases, sales, nurse healing, reforging, and currency flow will appear here.
+		}
+
+		Fishing: {
+			Title: Fishing
+			Description: Casts, catches, interrupted casts, and catch details will appear here.
+		}
+
+		Movement: {
+			Title: Movement
+			Description: Total distance and distance by movement type will appear here.
+		}
+
+		Survival: {
+			Title: Survival
+			Description: Deaths, life lost, and damage source statistics will appear here.
+		}
+	}
+
+	List: {
+		NameColumn: Name
+		MetricColumn: Units / events
+		NoResults: No entries match the current filters
+		SortDescending: Units ↓
+		SortAscending: Units ↑
+		SortName: Name A–Z
+		MetricFormat: "{0:N0} units / {1:N0} events"
+		DemoPickupGroup: Temporary data: Item pickups
+		DemoUseGroup: Temporary data: Item uses
+		DemoModdedPickup: Modded item sample: Astral Fragment
+		DemoModdedUse: Zero-value modded item sample
+	}
+
+	Toolbar: {
+		SearchHint: Search names…
+		ScopeCareer: Character career
+		ScopeCurrentWorld: Character in world
+		ScopeWorldPublic: World public
+		ScopeCareerDescription: Scope: this character's full career.
+		ScopeCurrentWorldDescription: Scope: this character in the current world.
+		ScopeWorldPublicDescription: Scope: public data for the current world.
+		ScopedTitleFormat: "{0} · {1}"
+		ScopedDescriptionFormat: "{0} {1}"
+		SortDescending: Units ↓
+		SortAscending: Units ↑
+		SortName: Name A–Z
+		HideZeroOn: Hide zero: On
+		HideZeroOff: Hide zero: Off
+		SourceAll: All sources
+		SourceVanilla: Vanilla only
+		SourceModded: Modded only
+	}
 }
 
 Configs: {

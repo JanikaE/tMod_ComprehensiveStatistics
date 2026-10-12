@@ -9,6 +9,87 @@ UI: {
 		按住右键可拖动此按钮
 		'''
 	CloseButtonTooltip: 关闭
+
+	Tabs: {
+		Overview: {
+			Title: 综合概览
+			Description: 这里将显示各类统计的代表性总计和常用摘要。
+		}
+
+		Blocks: {
+			Title: 物块
+			Description: 这里将显示实体物块、背景墙和家具或多格物体的拆除统计。
+		}
+
+		Items: {
+			Title: 物品
+			Description: 这里将显示物品拾取与物品使用统计。
+		}
+
+		Interactions: {
+			Title: 设施交互
+			Description: 这里将显示增益站、家具、容器、晶塔、钟和机关的交互统计。
+		}
+
+		NPCs: {
+			Title: NPC
+			Description: 这里将显示 NPC 对话、击杀、协助和世界死亡统计。
+		}
+
+		Economy: {
+			Title: 经济
+			Description: 这里将显示买入、卖出、护士治疗、重铸和货币流量统计。
+		}
+
+		Fishing: {
+			Title: 钓鱼
+			Description: 这里将显示抛竿、上钩、空竿或中断以及渔获统计。
+		}
+
+		Movement: {
+			Title: 移动
+			Description: 这里将显示总移动距离以及各类移动方式的距离统计。
+		}
+
+		Survival: {
+			Title: 生存
+			Description: 这里将显示死亡、掉血和伤害来源统计。
+		}
+	}
+
+	List: {
+		NameColumn: 名称
+		MetricColumn: 数量 / 次数
+		NoResults: 没有符合当前条件的条目
+		SortDescending: 数量 ↓
+		SortAscending: 数量 ↑
+		SortName: 名称 A–Z
+		MetricFormat: "{0:N0} 个 / {1:N0} 次"
+		DemoPickupGroup: 临时数据：物品拾取
+		DemoUseGroup: 临时数据：物品使用
+		DemoModdedPickup: 模组物品示例：星辉碎片
+		DemoModdedUse: 模组物品零值示例
+	}
+
+	Toolbar: {
+		SearchHint: 搜索名称…
+		ScopeCareer: 角色生涯
+		ScopeCurrentWorld: 角色当前世界
+		ScopeWorldPublic: 世界公共
+		ScopeCareerDescription: 范围：该角色的全部生涯。
+		ScopeCurrentWorldDescription: 范围：该角色所在的当前世界。
+		ScopeWorldPublicDescription: 范围：当前世界的公共数据。
+		ScopedTitleFormat: "{0} · {1}"
+		ScopedDescriptionFormat: "{0} {1}"
+		SortDescending: 数量 ↓
+		SortAscending: 数量 ↑
+		SortName: 名称 A–Z
+		HideZeroOn: 隐藏零值：开
+		HideZeroOff: 隐藏零值：关
+		SourceAll: 全部来源
+		SourceVanilla: 仅原版
+		SourceModded: 仅模组
+	}
 }
 
 Configs: {

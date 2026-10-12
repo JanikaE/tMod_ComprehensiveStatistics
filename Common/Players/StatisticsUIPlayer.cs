@@ -5,14 +5,20 @@ using Terraria.ModLoader;
 
 namespace ComprehensiveStatistics.Common.Players
 {
+    /// <summary>
+    /// 将玩家快捷键输入转交给统一的 UI 系统处理。
+    /// </summary>
     [Autoload(Side = ModSide.Client)]
     internal sealed class StatisticsUIPlayer : ModPlayer
     {
         public override void ProcessTriggers(TriggersSet triggersSet)
         {
-            if (!Main.gameMenu && ComprehensiveStatistics.ToggleStatisticsKeybind?.JustPressed == true)
+            StatisticsUISystem uiSystem = ModContent.GetInstance<StatisticsUISystem>();
+            if (!Main.gameMenu
+                && !uiSystem.IsTakingTextInput
+                && ComprehensiveStatistics.ToggleStatisticsKeybind?.JustPressed == true)
             {
-                ModContent.GetInstance<StatisticsUISystem>().Toggle();
+                uiSystem.Toggle();
             }
         }
     }

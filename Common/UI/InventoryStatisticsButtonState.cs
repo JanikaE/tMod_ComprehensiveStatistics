@@ -13,6 +13,9 @@ using Terraria.UI;
 
 namespace ComprehensiveStatistics.Common.UI
 {
+    /// <summary>
+    /// 物品栏旁的统计入口，支持右键拖动并把相对位置保存到客户端配置。
+    /// </summary>
     internal sealed class InventoryStatisticsButtonState : UIState
     {
         private const float ButtonSize = 44f;
@@ -86,6 +89,7 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             CalculatedStyle dimensions = buttonPanel.GetDimensions();
+            // 记录鼠标相对按钮左上角的偏移，拖动时不会发生跳变。
             dragOffset = evt.MousePosition - new Vector2(dimensions.X, dimensions.Y);
             isDragging = true;
             Main.LocalPlayer.mouseInterface = true;
@@ -134,6 +138,7 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             GetMovementBounds(out float maxLeft, out float maxTop);
+            // 保存 0～1 的比例而非像素，兼容后续分辨率和 UI 缩放变化。
             config.InventoryButtonHorizontal = maxLeft > 0f ? buttonPanel.Left.Pixels / maxLeft : 0f;
             config.InventoryButtonVertical = maxTop > 0f ? buttonPanel.Top.Pixels / maxTop : 0f;
             config.SaveChanges(broadcast: false);
