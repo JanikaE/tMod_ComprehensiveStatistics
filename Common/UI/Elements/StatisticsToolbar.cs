@@ -10,7 +10,7 @@ using Terraria.UI;
 namespace ComprehensiveStatistics.Common.UI.Elements
 {
     /// <summary>
-    /// 统计查看范围；A5 只切换展示语义，B1 起由数据层提供各范围的真实内容。
+    /// 统计查看范围；工具栏会根据当前 Tab 排除不适用的世界公共范围。
     /// </summary>
     internal enum StatisticsViewScope
     {
@@ -52,6 +52,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private StatisticsListSortMode sortMode = StatisticsListSortMode.ValueDescending;
         private StatisticsContentSourceFilter sourceFilter = StatisticsContentSourceFilter.All;
         private bool hideZeroValues = true;
+        private bool worldPublicScopeAvailable = true;
         private string searchQuery = string.Empty;
         private float lastWidth = -1f;
 
@@ -105,6 +106,18 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal StatisticsViewScope Scope => scope;
 
         internal bool IsWritingSearchText => searchBar.IsWritingText;
+
+        internal void SetWorldPublicScopeAvailable(bool available)
+        {
+            worldPublicScopeAvailable = available;
+            if (!available && scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                // 切入纯角色统计页时不能保留一个该页无法通过按钮再次选中的范围。
+                scope = StatisticsViewScope.CharacterCareer;
+            }
+
+            RefreshButtonLabels();
+        }
 
         public override void OnActivate()
         {
@@ -168,7 +181,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             scope = scope switch
             {
                 StatisticsViewScope.CharacterCareer => StatisticsViewScope.CharacterCurrentWorld,
-                StatisticsViewScope.CharacterCurrentWorld => StatisticsViewScope.CurrentWorldPublic,
+                StatisticsViewScope.CharacterCurrentWorld when worldPublicScopeAvailable =>
+                    StatisticsViewScope.CurrentWorldPublic,
                 _ => StatisticsViewScope.CharacterCareer
             };
 

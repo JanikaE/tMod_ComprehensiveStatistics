@@ -9,6 +9,14 @@ UI: {
 		按住右键可拖动此按钮
 		'''
 	CloseButtonTooltip: 关闭
+	StatisticsStartedAt: 统计开始时间：{0:g}
+	StatisticsStartUnavailable: 尚未进入世界，无可用的统计开始时间。
+	B2PersistenceTestCounter: B2 临时测试 · 进入世界次数：{0:N0}
+
+	Survival: {
+		DeathTotal: 死亡总数：{0:N0}
+		DeathTotalUnavailable: 死亡属于角色统计，没有世界公共总数。
+	}
 
 	Tabs: {
 		Overview: {

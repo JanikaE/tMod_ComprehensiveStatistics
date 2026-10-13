@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using ComprehensiveStatistics.Common.Players;
 using ComprehensiveStatistics.Common.Systems;
+using ComprehensiveStatistics.Common.Statistics;
 using ComprehensiveStatistics.Common.UI.Elements;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -27,9 +30,10 @@ namespace ComprehensiveStatistics.Common.UI
         private const float ColumnGap = 10f;
         private const float TabGap = 4f;
         private const int ItemsTabIndex = 2;
-        private const float ToolbarTop = 108f;
+        private const int SurvivalTabIndex = 8;
+        private const float ToolbarTop = 138f;
         private const float ToolbarHeight = 62f;
-        private const float ListTop = 180f;
+        private const float ListTop = 210f;
 
         // 顺序同时决定导航显示顺序，键名用于拼接各 Tab 的本地化路径。
         private static readonly string[] TabLocalizationKeys =
@@ -45,6 +49,20 @@ namespace ComprehensiveStatistics.Common.UI
             "Survival"
         };
 
+        // 第一版只有概览和 NPC 页会展示世界公共统计；其余页面记录的都是角色行为。
+        private static readonly bool[] TabSupportsWorldPublicScope =
+        {
+            true,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false
+        };
+
         private readonly List<UIPanel> tabButtons = new List<UIPanel>(TabCount);
 
         private UIPanel window;
@@ -52,12 +70,16 @@ namespace ComprehensiveStatistics.Common.UI
         private UIPanel contentPanel;
         private UIText contentTitle;
         private UIText contentDescription;
+        private UIText statisticsStartedAt;
+        private UIText persistenceTestCounter;
+        private UIText deathTotal;
         private StatisticsToolbar toolbar;
         private VirtualizedStatisticsList demoList;
         private UIImageButton closeButton;
         private int selectedTabIndex;
         private Point lastViewportSize;
         private bool isDemoListAttached;
+        private bool isDeathTotalAttached;
 
         internal bool IsWritingSearchText => toolbar?.IsWritingSearchText == true;
 
@@ -128,6 +150,25 @@ namespace ComprehensiveStatistics.Common.UI
             contentDescription.TextColor = new Color(190, 200, 225);
             contentPanel.Append(contentDescription);
 
+            statisticsStartedAt = new UIText(string.Empty, 0.78f);
+            statisticsStartedAt.Left.Set(2f, 0f);
+            statisticsStartedAt.Top.Set(92f, 0f);
+            statisticsStartedAt.TextColor = new Color(151, 170, 214);
+            contentPanel.Append(statisticsStartedAt);
+
+            persistenceTestCounter = new UIText(string.Empty, 0.78f);
+            persistenceTestCounter.Left.Set(2f, 0f);
+            persistenceTestCounter.Top.Set(112f, 0f);
+            persistenceTestCounter.TextColor = new Color(235, 190, 105);
+            contentPanel.Append(persistenceTestCounter);
+
+            deathTotal = new UIText(string.Empty, 1.05f);
+            deathTotal.Left.Set(8f, 0f);
+            deathTotal.Top.Set(ListTop + 12f, 0f);
+            deathTotal.Width.Set(-16f, 1f);
+            deathTotal.IsWrapped = true;
+            deathTotal.TextColor = new Color(232, 237, 255);
+
             demoList = CreateDemoList();
             demoList.Top.Set(ListTop, 0f);
             demoList.Width.Set(0f, 1f);
@@ -187,9 +228,11 @@ namespace ComprehensiveStatistics.Common.UI
 
             bool changed = selectedTabIndex != tabIndex;
             selectedTabIndex = tabIndex;
+            toolbar.SetWorldPublicScopeAvailable(TabSupportsWorldPublicScope[tabIndex]);
             UpdatePageHeading();
-            // A4 临时数据仅挂载到物品页，其他页继续显示 A3 占位内容。
+            // A4 临时列表仍只用于物品页；B3 的正式死亡总数单独挂载到生存页。
             SetDemoListVisible(tabIndex == ItemsTabIndex);
+            SetDeathTotalVisible(tabIndex == SurvivalTabIndex);
             UpdateTabColors();
 
             if (changed && playSound)
@@ -287,7 +330,6 @@ namespace ComprehensiveStatistics.Common.UI
 
         private void HandleScopeChanged(StatisticsViewScope scope)
         {
-            // A5 只有临时数据，范围切换先验证页面语义；B1 会在这里接入真实数据源。
             UpdatePageHeading();
         }
 
@@ -315,6 +357,87 @@ namespace ComprehensiveStatistics.Common.UI
                 "Mods.ComprehensiveStatistics.UI.Toolbar.ScopedDescriptionFormat",
                 StatisticsToolbar.GetScopeDescription(scope).Value,
                 GetTabText(selectedTabIndex, "Description").Value));
+            UpdateStatisticsStartedAt(scope);
+        }
+
+        private void UpdateStatisticsStartedAt(StatisticsViewScope scope)
+        {
+            DateTimeOffset? startedAtUtc = null;
+
+            if (!Main.gameMenu && Main.LocalPlayer?.active == true)
+            {
+                if (scope == StatisticsViewScope.CurrentWorldPublic)
+                {
+                    startedAtUtc = ModContent.GetInstance<StatisticsWorldSystem>().Data?.StartedAtUtc;
+                }
+                else
+                {
+                    StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+                    startedAtUtc = scope == StatisticsViewScope.CharacterCurrentWorld
+                        ? statisticsPlayer.CurrentWorldSlice?.StartedAtUtc
+                        : statisticsPlayer.Data?.Career.StartedAtUtc;
+                }
+            }
+
+            if (startedAtUtc.HasValue)
+            {
+                statisticsStartedAt.SetText(Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.StatisticsStartedAt",
+                    startedAtUtc.Value.ToLocalTime()));
+            }
+            else
+            {
+                statisticsStartedAt.SetText(
+                    Language.GetText("Mods.ComprehensiveStatistics.UI.StatisticsStartUnavailable"));
+            }
+
+            UpdatePersistenceTestCounter(scope);
+            UpdateDeathTotal(scope);
+        }
+
+        private void UpdatePersistenceTestCounter(StatisticsViewScope scope)
+        {
+            if (Main.gameMenu
+                || Main.LocalPlayer?.active != true
+                || scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                persistenceTestCounter.SetText(string.Empty);
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            long worldEntries = scopeData?
+                .GetValue(InternalStatisticKeys.B2WorldEntries).Events ?? 0L;
+            persistenceTestCounter.SetText(Language.GetTextValue(
+                "Mods.ComprehensiveStatistics.UI.B2PersistenceTestCounter",
+                worldEntries));
+        }
+
+        private void UpdateDeathTotal(StatisticsViewScope scope)
+        {
+            if (selectedTabIndex != SurvivalTabIndex)
+            {
+                return;
+            }
+
+            if (scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                deathTotal.SetText(
+                    Language.GetText("Mods.ComprehensiveStatistics.UI.Survival.DeathTotalUnavailable"));
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            long totalDeaths = scopeData?.GetValue(StatisticKeys.PlayerDeaths).Events ?? 0L;
+            deathTotal.SetText(Language.GetTextValue(
+                "Mods.ComprehensiveStatistics.UI.Survival.DeathTotal",
+                totalDeaths));
         }
 
         private void SetDemoListVisible(bool visible)
@@ -335,6 +458,32 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             isDemoListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        private void SetDeathTotalVisible(bool visible)
+        {
+            if (visible == isDeathTotalAttached)
+            {
+                if (visible)
+                {
+                    UpdateDeathTotal(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(deathTotal);
+                UpdateDeathTotal(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                deathTotal.Remove();
+            }
+
+            isDeathTotalAttached = visible;
             contentPanel.Recalculate();
         }
 

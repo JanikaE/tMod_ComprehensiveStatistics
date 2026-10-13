@@ -9,6 +9,14 @@ UI: {
 		Hold right-click to drag this button
 		'''
 	CloseButtonTooltip: Close
+	StatisticsStartedAt: Statistics started: {0:g}
+	StatisticsStartUnavailable: Statistics start time is unavailable outside a world.
+	B2PersistenceTestCounter: B2 temporary test · World entries: {0:N0}
+
+	Survival: {
+		DeathTotal: Total deaths: {0:N0}
+		DeathTotalUnavailable: Deaths are character statistics and have no world-public total.
+	}
 
 	Tabs: {
 		Overview: {
