@@ -19,11 +19,17 @@ namespace ComprehensiveStatistics.Common.Statistics
         private readonly Dictionary<StatisticKey, StatisticMetrics> entries =
             new Dictionary<StatisticKey, StatisticMetrics>();
 
+        /// <summary>
+        /// 使用当前存档格式创建空统计范围。
+        /// </summary>
         internal StatisticsData(DateTimeOffset startedAtUtc)
             : this(StatisticsDataFormat.CurrentVersion, startedAtUtc)
         {
         }
 
+        /// <summary>
+        /// 使用指定格式版本和统计起始时间创建统计范围。
+        /// </summary>
         internal StatisticsData(int formatVersion, DateTimeOffset startedAtUtc)
         {
             if (formatVersion <= 0)
@@ -41,6 +47,9 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal IReadOnlyDictionary<StatisticKey, StatisticMetrics> Entries => entries;
 
+        /// <summary>
+        /// 将非零增量安全地累加到指定统计项。
+        /// </summary>
         internal void Add(StatisticKey key, StatisticMetrics delta)
         {
             // 零值不进入字典，保证后续 B2 序列化天然保持稀疏。
@@ -53,6 +62,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             entries[key] = current.Add(delta);
         }
 
+        /// <summary>
+        /// 获取指定统计项；未记录的键返回零值。
+        /// </summary>
         internal StatisticMetrics GetValue(StatisticKey key)
         {
             return entries.TryGetValue(key, out StatisticMetrics value)
@@ -69,11 +81,17 @@ namespace ComprehensiveStatistics.Common.Statistics
         private readonly Dictionary<Guid, StatisticsData> worldSlices =
             new Dictionary<Guid, StatisticsData>();
 
+        /// <summary>
+        /// 创建包含空角色生涯范围的统计数据。
+        /// </summary>
         internal CharacterStatisticsData(DateTimeOffset startedAtUtc)
         {
             Career = new StatisticsData(startedAtUtc);
         }
 
+        /// <summary>
+        /// 从已加载的角色生涯和世界切片恢复统计数据。
+        /// </summary>
         internal CharacterStatisticsData(
             StatisticsData career,
             IDictionary<Guid, StatisticsData> loadedWorldSlices)
@@ -98,6 +116,9 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal IReadOnlyDictionary<Guid, StatisticsData> WorldSlices => worldSlices;
 
+        /// <summary>
+        /// 获取指定世界切片；不存在时以当前时间创建。
+        /// </summary>
         internal StatisticsData GetOrCreateWorldSlice(Guid worldId, DateTimeOffset startedAtUtc)
         {
             if (!worldSlices.TryGetValue(worldId, out StatisticsData worldSlice))
@@ -109,6 +130,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             return worldSlice;
         }
 
+        /// <summary>
+        /// 将一次增量同时写入角色生涯和当前世界两个范围。
+        /// </summary>
         internal void Add(
             Guid worldId,
             StatisticKey key,

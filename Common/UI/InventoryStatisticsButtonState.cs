@@ -109,6 +109,9 @@ namespace ComprehensiveStatistics.Common.UI
             SavePosition();
         }
 
+        /// <summary>
+        /// 将归一化配置坐标换算为当前 UI 画布中的按钮位置。
+        /// </summary>
         private void PositionFromConfig()
         {
             GetMovementBounds(out float maxLeft, out float maxTop);
@@ -119,6 +122,9 @@ namespace ComprehensiveStatistics.Common.UI
             SetPosition(left, top);
         }
 
+        /// <summary>
+        /// 按拖动偏移移动按钮，并将其限制在可见 UI 画布内。
+        /// </summary>
         private void MoveToMouse()
         {
             GetMovementBounds(out float maxLeft, out float maxTop);
@@ -129,6 +135,9 @@ namespace ComprehensiveStatistics.Common.UI
             Main.LocalPlayer.mouseInterface = true;
         }
 
+        /// <summary>
+        /// 将按钮当前位置归一化后保存到本地客户端配置。
+        /// </summary>
         private void SavePosition()
         {
             ClientConfig config = ClientConfig.Instance;
@@ -144,12 +153,18 @@ namespace ComprehensiveStatistics.Common.UI
             config.SaveChanges(broadcast: false);
         }
 
+        /// <summary>
+        /// 计算按钮左上角在当前 UI 缩放下允许移动的最大坐标。
+        /// </summary>
         private static void GetMovementBounds(out float maxLeft, out float maxTop)
         {
             maxLeft = MathHelper.Max(0f, Main.screenWidth / Main.UIScale - ButtonSize);
             maxTop = MathHelper.Max(0f, Main.screenHeight / Main.UIScale - ButtonSize);
         }
 
+        /// <summary>
+        /// 仅在坐标变化时更新按钮位置并重新计算布局。
+        /// </summary>
         private void SetPosition(float left, float top)
         {
             if (buttonPanel.Left.Pixels != left || buttonPanel.Top.Pixels != top)
@@ -160,6 +175,9 @@ namespace ComprehensiveStatistics.Common.UI
             }
         }
 
+        /// <summary>
+        /// 将入口按钮点击转交给统一统计 UI 系统。
+        /// </summary>
         private static void OpenStatistics(UIMouseEvent evt, UIElement listeningElement)
         {
             ModContent.GetInstance<StatisticsUISystem>().Open();

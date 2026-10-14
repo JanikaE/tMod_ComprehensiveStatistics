@@ -14,8 +14,29 @@ UI: {
 	B2PersistenceTestCounter: B2 temporary test · World entries: {0:N0}
 
 	Survival: {
-		DeathTotal: Total deaths: {0:N0}
-		DeathTotalUnavailable: Deaths are character statistics and have no world-public total.
+		DeathSourcesGroup: Death count
+		DirectDeathGroup: Direct damage
+		ContinuousDeathGroup: Damage over time
+		UnknownDeathSource: Other or previously unclassified
+		UnclassifiedNpcDeath: Other or previously unclassified
+		DirectDamageGroup: Total direct damage
+		ContinuousLifeLossGroup: Damage over time
+		MultipleContinuousDamageEffects: Multiple damage-over-time effects
+		UnknownContinuousLifeLoss: Unknown
+		UnclassifiedNpcDamage: Other or previously unclassified
+		MissingNpcContent: Missing content: {0}
+		MissingBuffContent: Missing debuff: {0}
+
+		DirectDamageSources: {
+			NpcContact: NPC contact damage
+			HostileProjectile: Hostile projectile
+			PvP: PvP player or projectile
+			Fall: Falling
+			Drowning: Drowning
+			Lava: Lava
+			TrapOrTile: Trap or tile
+			Other: Other or previously unclassified
+		}
 	}
 
 	Tabs: {
@@ -66,13 +87,17 @@ UI: {
 	}
 
 	List: {
-		NameColumn: Name
 		MetricColumn: Units / events
+		EventsColumn: Events
+		AmountColumn: Life lost
+		ValueColumn: Value
 		NoResults: No entries match the current filters
 		SortDescending: Units ↓
 		SortAscending: Units ↑
 		SortName: Name A–Z
 		MetricFormat: "{0:N0} units / {1:N0} events"
+		EventsFormat: "{0:N0} events"
+		AmountFormat: "{0:N0}"
 		DemoPickupGroup: Temporary data: Item pickups
 		DemoUseGroup: Temporary data: Item uses
 		DemoModdedPickup: Modded item sample: Astral Fragment
@@ -92,8 +117,6 @@ UI: {
 		SortDescending: Units ↓
 		SortAscending: Units ↑
 		SortName: Name A–Z
-		HideZeroOn: Hide zero: On
-		HideZeroOff: Hide zero: Off
 		SourceAll: All sources
 		SourceVanilla: Vanilla only
 		SourceModded: Modded only

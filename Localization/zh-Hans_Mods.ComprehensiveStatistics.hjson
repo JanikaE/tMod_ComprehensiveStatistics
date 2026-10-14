@@ -14,8 +14,29 @@ UI: {
 	B2PersistenceTestCounter: B2 临时测试 · 进入世界次数：{0:N0}
 
 	Survival: {
-		DeathTotal: 死亡总数：{0:N0}
-		DeathTotalUnavailable: 死亡属于角色统计，没有世界公共总数。
+		DeathSourcesGroup: 死亡次数
+		DirectDeathGroup: 直接伤害
+		ContinuousDeathGroup: 持续伤害
+		UnknownDeathSource: 其他或此前未分类
+		UnclassifiedNpcDeath: 其他或此前未分类
+		DirectDamageGroup: 直接伤害总量
+		ContinuousLifeLossGroup: 持续伤害
+		MultipleContinuousDamageEffects: 多个持续伤害效果
+		UnknownContinuousLifeLoss: 未知
+		UnclassifiedNpcDamage: 其他或此前未分类
+		MissingNpcContent: 缺失内容：{0}
+		MissingBuffContent: 缺失 Debuff：{0}
+
+		DirectDamageSources: {
+			NpcContact: NPC 接触伤害
+			HostileProjectile: 敌对弹幕
+			PvP: PvP 玩家或弹幕
+			Fall: 摔落
+			Drowning: 溺水
+			Lava: 熔岩
+			TrapOrTile: 陷阱或物块
+			Other: 其他或此前未分类
+		}
 	}
 
 	Tabs: {
@@ -66,13 +87,17 @@ UI: {
 	}
 
 	List: {
-		NameColumn: 名称
 		MetricColumn: 数量 / 次数
+		EventsColumn: 次数
+		AmountColumn: 实际掉血
+		ValueColumn: 数值
 		NoResults: 没有符合当前条件的条目
 		SortDescending: 数量 ↓
 		SortAscending: 数量 ↑
 		SortName: 名称 A–Z
 		MetricFormat: "{0:N0} 个 / {1:N0} 次"
+		EventsFormat: "{0:N0} 次"
+		AmountFormat: "{0:N0}"
 		DemoPickupGroup: 临时数据：物品拾取
 		DemoUseGroup: 临时数据：物品使用
 		DemoModdedPickup: 模组物品示例：星辉碎片
@@ -92,8 +117,6 @@ UI: {
 		SortDescending: 数量 ↓
 		SortAscending: 数量 ↑
 		SortName: 名称 A–Z
-		HideZeroOn: 隐藏零值：开
-		HideZeroOff: 隐藏零值：关
 		SourceAll: 全部来源
 		SourceVanilla: 仅原版
 		SourceModded: 仅模组

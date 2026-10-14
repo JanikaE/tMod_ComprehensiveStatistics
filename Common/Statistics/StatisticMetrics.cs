@@ -7,6 +7,9 @@ namespace ComprehensiveStatistics.Common.Statistics
     /// </summary>
     internal readonly struct StatisticMetrics : IEquatable<StatisticMetrics>
     {
+        /// <summary>
+        /// 创建一组非负的统计指标。
+        /// </summary>
         internal StatisticMetrics(long events = 0L, long units = 0L, long amount = 0L)
         {
             if (events < 0L)
@@ -37,6 +40,9 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal bool IsZero => Events == 0L && Units == 0L && Amount == 0L;
 
+        /// <summary>
+        /// 将另一组指标逐项累加，并在整数上限处饱和。
+        /// </summary>
         internal StatisticMetrics Add(StatisticMetrics other)
         {
             // 极端情况下饱和到 long.MaxValue，统计累计不应因整数溢出而回绕或令游戏崩溃。
@@ -46,6 +52,9 @@ namespace ComprehensiveStatistics.Common.Statistics
                 SaturatingAdd(Amount, other.Amount));
         }
 
+        /// <summary>
+        /// 判断两组指标的三个统计口径是否完全相同。
+        /// </summary>
         public bool Equals(StatisticMetrics other)
         {
             return Events == other.Events && Units == other.Units && Amount == other.Amount;
@@ -61,6 +70,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             return HashCode.Combine(Events, Units, Amount);
         }
 
+        /// <summary>
+        /// 安全累加两个非负整数，避免长期统计发生溢出回绕。
+        /// </summary>
         private static long SaturatingAdd(long left, long right)
         {
             return left > long.MaxValue - right ? long.MaxValue : left + right;

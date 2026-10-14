@@ -1,4 +1,7 @@
 using System;
+using Terraria;
+using Terraria.ID;
+using Terraria.ModLoader;
 
 namespace ComprehensiveStatistics.Common.Statistics
 {
@@ -7,6 +10,9 @@ namespace ComprehensiveStatistics.Common.Statistics
     /// </summary>
     internal readonly struct StableContentKey : IEquatable<StableContentKey>
     {
+        /// <summary>
+        /// 创建一个不依赖运行时数字 ID 的内容键。
+        /// </summary>
         internal StableContentKey(string modName, string contentName)
         {
             if (string.IsNullOrWhiteSpace(modName))
@@ -27,6 +33,92 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal string ContentName { get; }
 
+        /// <summary>
+        /// 尝试从 NPC 实例创建稳定内容键。
+        /// </summary>
+        internal static bool TryCreateForNpc(NPC npc, out StableContentKey key)
+        {
+            if (npc?.ModNPC != null)
+            {
+                key = new StableContentKey(npc.ModNPC.Mod.Name, npc.ModNPC.Name);
+                return true;
+            }
+
+            if (npc != null && NPCID.Search.TryGetName(npc.type, out string contentName))
+            {
+                key = new StableContentKey("Terraria", contentName);
+                return true;
+            }
+
+            key = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试从 Buff 类型创建稳定内容键。
+        /// </summary>
+        internal static bool TryCreateForBuff(int buffType, out StableContentKey key)
+        {
+            ModBuff modBuff = BuffLoader.GetBuff(buffType);
+            if (modBuff != null)
+            {
+                key = new StableContentKey(modBuff.Mod.Name, modBuff.Name);
+                return true;
+            }
+
+            if (BuffID.Search.TryGetName(buffType, out string contentName))
+            {
+                key = new StableContentKey("Terraria", contentName);
+                return true;
+            }
+
+            key = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试将稳定内容键解析为当前会话中的 NPC 类型 ID。
+        /// </summary>
+        internal bool TryResolveNpcType(out int npcType)
+        {
+            if (string.Equals(ModName, "Terraria", StringComparison.Ordinal))
+            {
+                return NPCID.Search.TryGetId(ContentName, out npcType);
+            }
+
+            if (ModContent.TryFind(ModName, ContentName, out ModNPC modNpc))
+            {
+                npcType = modNpc.Type;
+                return true;
+            }
+
+            npcType = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试将稳定内容键解析为当前会话中的 Buff 类型 ID。
+        /// </summary>
+        internal bool TryResolveBuffType(out int buffType)
+        {
+            if (string.Equals(ModName, "Terraria", StringComparison.Ordinal))
+            {
+                return BuffID.Search.TryGetId(ContentName, out buffType);
+            }
+
+            if (ModContent.TryFind(ModName, ContentName, out ModBuff modBuff))
+            {
+                buffType = modBuff.Type;
+                return true;
+            }
+
+            buffType = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// 按模组名和内容内部名比较两个稳定内容键。
+        /// </summary>
         public bool Equals(StableContentKey other)
         {
             return string.Equals(ModName, other.ModName, StringComparison.Ordinal)
@@ -50,11 +142,17 @@ namespace ComprehensiveStatistics.Common.Statistics
             return $"{ModName}/{ContentName}";
         }
 
+        /// <summary>
+        /// 判断两个稳定内容键是否相等。
+        /// </summary>
         public static bool operator ==(StableContentKey left, StableContentKey right)
         {
             return left.Equals(right);
         }
 
+        /// <summary>
+        /// 判断两个稳定内容键是否不相等。
+        /// </summary>
         public static bool operator !=(StableContentKey left, StableContentKey right)
         {
             return !left.Equals(right);

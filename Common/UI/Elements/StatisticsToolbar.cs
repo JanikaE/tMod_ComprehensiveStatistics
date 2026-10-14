@@ -30,7 +30,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     }
 
     /// <summary>
-    /// 所有统计页共用的工具栏，集中维护范围、搜索、排序与筛选状态。
+    /// 所有统计页共用的工具栏，集中维护范围、搜索、排序与内容来源筛选状态。
     /// </summary>
     internal sealed class StatisticsToolbar : UIElement
     {
@@ -39,26 +39,27 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private const float ControlGap = 5f;
 
         private readonly Action<StatisticsViewScope> scopeChanged;
-        private readonly Action<string, bool, StatisticsContentSourceFilter> filtersChanged;
+        private readonly Action<string, StatisticsContentSourceFilter> filtersChanged;
         private readonly Action<StatisticsListSortMode> sortChanged;
         private readonly ToolbarButton scopeButton;
         private readonly UIPanel searchPanel;
         private readonly UISearchBar searchBar;
         private readonly ToolbarButton sortButton;
-        private readonly ToolbarButton hideZeroButton;
         private readonly ToolbarButton sourceButton;
 
         private StatisticsViewScope scope = StatisticsViewScope.CharacterCareer;
         private StatisticsListSortMode sortMode = StatisticsListSortMode.ValueDescending;
         private StatisticsContentSourceFilter sourceFilter = StatisticsContentSourceFilter.All;
-        private bool hideZeroValues = true;
         private bool worldPublicScopeAvailable = true;
         private string searchQuery = string.Empty;
         private float lastWidth = -1f;
 
+        /// <summary>
+        /// 创建工具栏并绑定范围、筛选和排序状态变化回调。
+        /// </summary>
         internal StatisticsToolbar(
             Action<StatisticsViewScope> scopeChanged,
-            Action<string, bool, StatisticsContentSourceFilter> filtersChanged,
+            Action<string, StatisticsContentSourceFilter> filtersChanged,
             Action<StatisticsListSortMode> sortChanged)
         {
             this.scopeChanged = scopeChanged;
@@ -93,10 +94,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             sortButton.Top.Set(RowHeight + RowGap, 0f);
             Append(sortButton);
 
-            hideZeroButton = new ToolbarButton(ToggleHideZeroValues);
-            hideZeroButton.Top.Set(RowHeight + RowGap, 0f);
-            Append(hideZeroButton);
-
             sourceButton = new ToolbarButton(CycleSourceFilter);
             sourceButton.Top.Set(RowHeight + RowGap, 0f);
             Append(sourceButton);
@@ -107,6 +104,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
         internal bool IsWritingSearchText => searchBar.IsWritingText;
 
+        /// <summary>
+        /// 设置当前页面是否允许选择世界公共统计范围。
+        /// </summary>
         internal void SetWorldPublicScopeAvailable(bool available)
         {
             worldPublicScopeAvailable = available;
@@ -140,9 +140,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             base.Update(gameTime);
         }
 
+        /// <summary>
+        /// 根据可用宽度重新分配两行工具栏控件。
+        /// </summary>
         private void UpdateControlLayout(float width)
         {
-            // 第一行给范围按钮约三分之一宽度；第二行三等分，窄窗口也不会互相覆盖。
+            // 第一行给范围按钮约三分之一宽度；第二行由排序和来源筛选平分。
             float scopeWidth = MathHelper.Clamp(width * 0.34f, 96f, 190f);
             scopeWidth = MathHelper.Min(scopeWidth, MathHelper.Max(1f, width - ControlGap - 90f));
             scopeButton.Left.Set(0f, 0f);
@@ -151,16 +154,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             searchPanel.Left.Set(scopeWidth + ControlGap, 0f);
             searchPanel.Width.Set(-(scopeWidth + ControlGap), 1f);
 
-            float thirdWidth = MathHelper.Max(1f, (width - ControlGap * 2f) / 3f);
+            float halfWidth = MathHelper.Max(1f, (width - ControlGap) / 2f);
             sortButton.Left.Set(0f, 0f);
-            sortButton.Width.Set(thirdWidth, 0f);
-            hideZeroButton.Left.Set(thirdWidth + ControlGap, 0f);
-            hideZeroButton.Width.Set(thirdWidth, 0f);
-            sourceButton.Left.Set((thirdWidth + ControlGap) * 2f, 0f);
-            sourceButton.Width.Set(thirdWidth, 0f);
+            sortButton.Width.Set(halfWidth, 0f);
+            sourceButton.Left.Set(halfWidth + ControlGap, 0f);
+            sourceButton.Width.Set(halfWidth, 0f);
             Recalculate();
         }
 
+        /// <summary>
+        /// 点击搜索面板时进入文本输入状态。
+        /// </summary>
         private void StartSearchInput(UIMouseEvent evt, UIElement listeningElement)
         {
             if (!searchBar.IsWritingText)
@@ -169,12 +173,18 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             }
         }
 
+        /// <summary>
+        /// 保存搜索文本并立即通知列表刷新筛选结果。
+        /// </summary>
         private void SearchContentsChanged(string contents)
         {
             searchQuery = contents;
             NotifyFiltersChanged();
         }
 
+        /// <summary>
+        /// 循环切换当前页面支持的统计查看范围。
+        /// </summary>
         private void CycleScope()
         {
             StopSearchInput();
@@ -190,6 +200,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             scopeChanged(scope);
         }
 
+        /// <summary>
+        /// 在降序、升序和名称排序之间循环切换。
+        /// </summary>
         private void CycleSortMode()
         {
             StopSearchInput();
@@ -204,14 +217,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             sortChanged(sortMode);
         }
 
-        private void ToggleHideZeroValues()
-        {
-            StopSearchInput();
-            hideZeroValues = !hideZeroValues;
-            RefreshButtonLabels();
-            NotifyFiltersChanged();
-        }
-
+        /// <summary>
+        /// 在全部、原版和模组来源筛选之间循环切换。
+        /// </summary>
         private void CycleSourceFilter()
         {
             StopSearchInput();
@@ -226,11 +234,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             NotifyFiltersChanged();
         }
 
+        /// <summary>
+        /// 将当前搜索文本和来源筛选作为一个状态通知给列表。
+        /// </summary>
         private void NotifyFiltersChanged()
         {
-            filtersChanged(searchQuery, hideZeroValues, sourceFilter);
+            filtersChanged(searchQuery, sourceFilter);
         }
 
+        /// <summary>
+        /// 在操作其他工具栏控件前结束搜索框的文本输入状态。
+        /// </summary>
         private void StopSearchInput()
         {
             if (searchBar.IsWritingText)
@@ -239,17 +253,19 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             }
         }
 
+        /// <summary>
+        /// 根据当前状态和活动语言刷新所有按钮文字。
+        /// </summary>
         private void RefreshButtonLabels()
         {
             scopeButton.SetText(GetScopeText(scope));
             sortButton.SetText(Language.GetTextValue(GetSortLocalizationKey(sortMode)));
-            hideZeroButton.SetText(Language.GetTextValue(
-                hideZeroValues
-                    ? "Mods.ComprehensiveStatistics.UI.Toolbar.HideZeroOn"
-                    : "Mods.ComprehensiveStatistics.UI.Toolbar.HideZeroOff"));
             sourceButton.SetText(Language.GetTextValue(GetSourceLocalizationKey(sourceFilter)));
         }
 
+        /// <summary>
+        /// 获取指定查看范围的本地化短名称。
+        /// </summary>
         internal static LocalizedText GetScopeText(StatisticsViewScope viewScope)
         {
             return Language.GetText(viewScope switch
@@ -262,6 +278,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             });
         }
 
+        /// <summary>
+        /// 获取指定查看范围的本地化说明文字。
+        /// </summary>
         internal static LocalizedText GetScopeDescription(StatisticsViewScope viewScope)
         {
             return Language.GetText(viewScope switch
@@ -274,6 +293,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             });
         }
 
+        /// <summary>
+        /// 获取指定排序方式的本地化键。
+        /// </summary>
         private static string GetSortLocalizationKey(StatisticsListSortMode mode)
         {
             return mode switch
@@ -286,6 +308,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             };
         }
 
+        /// <summary>
+        /// 获取指定内容来源筛选的本地化键。
+        /// </summary>
         private static string GetSourceLocalizationKey(StatisticsContentSourceFilter filter)
         {
             return filter switch
@@ -306,6 +331,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             private readonly Action clickAction;
             private readonly UIText text;
 
+            /// <summary>
+            /// 创建执行指定无参数操作的工具栏按钮。
+            /// </summary>
             internal ToolbarButton(Action clickAction)
             {
                 this.clickAction = clickAction;
@@ -321,11 +349,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 Append(text);
             }
 
+            /// <summary>
+            /// 使用可随语言切换更新的本地化文本设置按钮内容。
+            /// </summary>
             internal void SetText(LocalizedText value)
             {
                 text.SetText(value);
             }
 
+            /// <summary>
+            /// 使用已经解析的字符串设置按钮内容。
+            /// </summary>
             internal void SetText(string value)
             {
                 text.SetText(value);
@@ -339,6 +373,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 base.Update(gameTime);
             }
 
+            /// <summary>
+            /// 执行按钮操作并播放统一点击音效。
+            /// </summary>
             private void HandleClick(UIMouseEvent evt, UIElement listeningElement)
             {
                 clickAction();

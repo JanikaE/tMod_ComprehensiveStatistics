@@ -53,6 +53,9 @@ namespace ComprehensiveStatistics.Common.Systems
             Close(playSound: false);
         }
 
+        /// <summary>
+        /// 在打开和关闭状态之间切换统计窗口。
+        /// </summary>
         internal void Toggle()
         {
             if (IsOpen)
@@ -65,6 +68,9 @@ namespace ComprehensiveStatistics.Common.Systems
             }
         }
 
+        /// <summary>
+        /// 打开统计窗口并保存当前快捷栏选择。
+        /// </summary>
         internal void Open()
         {
             if (IsOpen)
@@ -78,6 +84,9 @@ namespace ComprehensiveStatistics.Common.Systems
             SoundEngine.PlaySound(SoundID.MenuOpen);
         }
 
+        /// <summary>
+        /// 关闭统计窗口，并按需播放关闭音效。
+        /// </summary>
         internal void Close(bool playSound = true)
         {
             if (!IsOpen)

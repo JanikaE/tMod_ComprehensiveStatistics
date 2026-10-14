@@ -28,6 +28,9 @@ namespace ComprehensiveStatistics.Common.Statistics
         private const string UnitsKey = "Units";
         private const string AmountKey = "Amount";
 
+        /// <summary>
+        /// 将完整角色统计序列化为稳定、有序且稀疏的标签结构。
+        /// </summary>
         internal static TagCompound Serialize(CharacterStatisticsData data)
         {
             if (data == null)
@@ -54,6 +57,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             };
         }
 
+        /// <summary>
+        /// 尝试从玩家标签恢复受支持版本的角色统计。
+        /// </summary>
         internal static bool TryDeserialize(
             TagCompound playerTag,
             out CharacterStatisticsData data,
@@ -87,6 +93,7 @@ namespace ComprehensiveStatistics.Common.Statistics
                     new Dictionary<Guid, StatisticsData>();
                 foreach (TagCompound worldTag in root.GetList<TagCompound>(WorldSlicesKey))
                 {
+                    // 单个世界切片损坏不应阻止角色生涯及其他有效世界的数据恢复。
                     if (!Guid.TryParse(worldTag.GetString(WorldIdKey), out Guid worldId)
                         || worldSlices.ContainsKey(worldId)
                         || !TryDeserializeScope(worldTag.GetCompound(DataKey), out StatisticsData worldData))
@@ -107,6 +114,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
         }
 
+        /// <summary>
+        /// 将单个查看范围序列化，并按稳定键排序以保证输出可复现。
+        /// </summary>
         private static TagCompound SerializeScope(StatisticsData data)
         {
             List<TagCompound> entryTags = new List<TagCompound>();
@@ -161,6 +171,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             };
         }
 
+        /// <summary>
+        /// 尝试恢复单个统计范围，同时跳过其中损坏的独立条目。
+        /// </summary>
         private static bool TryDeserializeScope(TagCompound tag, out StatisticsData data)
         {
             data = null;
@@ -199,6 +212,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
         }
 
+        /// <summary>
+        /// 尝试恢复一项非零统计记录，并验证内容键的完整性。
+        /// </summary>
         private static bool TryDeserializeEntry(
             TagCompound tag,
             out StatisticKey key,
@@ -241,6 +257,9 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
         }
 
+        /// <summary>
+        /// 判断异常是否属于可由损坏或旧式存档触发的预期读取错误。
+        /// </summary>
         private static bool IsRecoverableDataError(Exception exception)
         {
             return exception is ArgumentException
