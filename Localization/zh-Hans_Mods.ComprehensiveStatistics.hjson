@@ -20,13 +20,13 @@ UI: {
 		DeathSourcesGroup: 死亡次数
 		DirectDeathGroup: 直接伤害
 		ContinuousDeathGroup: 持续伤害
-		UnknownDeathSource: 其他或此前未分类
-		UnclassifiedNpcDeath: 其他或此前未分类
+		UnknownDeathSource: 其他或未分类
+		UnclassifiedNpcDeath: 其他或未分类
 		DirectDamageGroup: 直接伤害
 		ContinuousLifeLossGroup: 持续伤害
 		MultipleContinuousDamageEffects: 多个持续伤害效果
 		UnknownContinuousLifeLoss: 未知
-		UnclassifiedNpcDamage: 其他或此前未分类
+		UnclassifiedNpcDamage: 其他或未分类
 		MissingNpcContent: 缺失内容：{0}
 		MissingBuffContent: 缺失 Debuff：{0}
 
@@ -38,7 +38,25 @@ UI: {
 			Drowning: 溺水
 			Lava: 熔岩
 			TrapOrTile: 陷阱或物块
-			Other: 其他或此前未分类
+			Other: 其他或未分类
+		}
+	}
+
+	Movement: {
+		MovementModes: 总移动距离
+		PreviouslyUnclassified: 其他或未分类
+		NormalOrUnclassifiedJump: 普通跳跃或未细分
+		MissingItemContent: 缺失内容：{0}
+
+		Modes: {
+			Minecart: 矿车
+			OtherMount: 坐骑
+			RopeOrPulley: 绳索
+			GrapplingHook: 钩爪
+			Flying: 飞行
+			Jumping: 跳跃
+			Falling: 下落
+			Walking: 步行
 		}
 	}
 
@@ -94,10 +112,12 @@ UI: {
 		MetricColumn: 数量 / 次数
 		EventsColumn: 次数
 		ValueColumn: 数值
+		DistanceColumn: 距离
 		NoResults: 没有符合当前条件的条目
 		MetricFormat: "{0:N0} 个 / {1:N0} 次"
 		EventsFormat: "{0:N0} 次"
 		AmountFormat: "{0:N0}"
+		DistanceFormat: "{0:N2} 格"
 		DemoPickupGroup: 临时数据：物品拾取
 		DemoUseGroup: 临时数据：物品使用
 		DemoModdedPickup: 模组物品示例：星辉碎片

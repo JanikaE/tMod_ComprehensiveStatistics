@@ -290,6 +290,14 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     amount);
             }
 
+            if (metricDisplay == StatisticsMetricDisplay.Distance)
+            {
+                // 存档以像素保存唯一真值，显示时按 Terraria 的 16 像素一格换算。
+                return Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.List.DistanceFormat",
+                    amount / 16d);
+            }
+
             if (metricDisplay == StatisticsMetricDisplay.Events)
             {
                 return Language.GetTextValue(

@@ -30,6 +30,7 @@ namespace ComprehensiveStatistics.Common.UI
         private const float ColumnGap = 10f;
         private const float TabGap = 4f;
         private const int ItemsTabIndex = 2;
+        private const int MovementTabIndex = 7;
         private const int SurvivalTabIndex = 8;
         private const float ToolbarTop = 38f;
         private const float ToolbarHeight = 28f;
@@ -74,11 +75,13 @@ namespace ComprehensiveStatistics.Common.UI
         private UIText statisticsStartedAt;
         private StatisticsToolbar toolbar;
         private VirtualizedStatisticsList demoList;
+        private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
         private UIImageButton closeButton;
         private int selectedTabIndex;
         private Point lastViewportSize;
         private bool isDemoListAttached;
+        private bool isMovementListAttached;
         private bool isSurvivalListAttached;
 
         internal bool IsWritingSearchText => toolbar?.IsWritingSearchText == true;
@@ -89,6 +92,7 @@ namespace ComprehensiveStatistics.Common.UI
         internal void ResetTransientViewState()
         {
             demoList?.ResetTransientState();
+            movementList?.ResetTransientState();
             survivalList?.ResetTransientState();
         }
 
@@ -168,6 +172,13 @@ namespace ComprehensiveStatistics.Common.UI
             survivalList.Width.Set(0f, 1f);
             survivalList.Height.Set(-ListTop, 1f);
 
+            movementList = new VirtualizedStatisticsList(
+                CreateMovementGroups(data: null),
+                StatisticsMetricDisplay.Distance);
+            movementList.Top.Set(ListTop, 0f);
+            movementList.Width.Set(0f, 1f);
+            movementList.Height.Set(-ListTop, 1f);
+
             demoList = CreateDemoList();
             demoList.Top.Set(ListTop, 0f);
             demoList.Width.Set(0f, 1f);
@@ -233,6 +244,7 @@ namespace ComprehensiveStatistics.Common.UI
             UpdatePageHeading();
             // A4 临时列表仍只用于物品页；正式生存总计单独挂载到生存页。
             SetDemoListVisible(tabIndex == ItemsTabIndex);
+            SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
             UpdateTabColors();
 
@@ -354,6 +366,7 @@ namespace ComprehensiveStatistics.Common.UI
             StatisticsContentSourceFilter sourceFilter)
         {
             demoList.SetFilters(searchQuery, sourceFilter);
+            movementList.SetFilters(searchQuery, sourceFilter);
             survivalList.SetFilters(searchQuery, sourceFilter);
         }
 
@@ -422,6 +435,30 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             UpdateSurvivalTotals(scope);
+            UpdateMovementTotals(scope);
+        }
+
+        /// <summary>
+        /// 从当前角色范围重新生成移动页的总距离统计。
+        /// </summary>
+        private void UpdateMovementTotals(StatisticsViewScope scope)
+        {
+            if (selectedTabIndex != MovementTabIndex)
+            {
+                return;
+            }
+
+            if (scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                movementList.SetGroups(CreateMovementGroups(data: null));
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            movementList.SetGroups(CreateMovementGroups(scopeData));
         }
 
         /// <summary>
@@ -468,6 +505,35 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             isDemoListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 按需挂载移动统计列表，并在显示时刷新当前范围的数据。
+        /// </summary>
+        private void SetMovementTotalsVisible(bool visible)
+        {
+            if (visible == isMovementListAttached)
+            {
+                if (visible)
+                {
+                    UpdateMovementTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(movementList);
+                UpdateMovementTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                movementList.Remove();
+            }
+
+            isMovementListAttached = visible;
             contentPanel.Recalculate();
         }
 
@@ -544,6 +610,177 @@ namespace ComprehensiveStatistics.Common.UI
                 showChildren: false);
 
             return new[] { directGroup, continuousGroup, unknownGroup };
+        }
+
+        /// <summary>
+        /// 创建总移动距离树；特殊移动方式按来源物品展开，合计始终由叶子项计算。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateMovementGroups(StatisticsData data)
+        {
+            long distancePixels = data?
+                .GetValue(StatisticKeys.TotalMovementDistance).Amount ?? 0L;
+            List<StatisticsListItem> basicModes = new List<StatisticsListItem>();
+            List<StatisticsListGroup> detailedModes = new List<StatisticsListGroup>();
+            long classifiedDistancePixels = 0L;
+            Array modes = Enum.GetValues(typeof(MovementModeKind));
+            foreach (MovementModeKind mode in modes)
+            {
+                List<StatisticsListItem> details = CreateMovementModeDetails(
+                    data,
+                    mode,
+                    out long modeDistancePixels);
+                classifiedDistancePixels = SaturatingAdd(
+                    classifiedDistancePixels,
+                    modeDistancePixels);
+
+                if (IsDetailedMovementMode(mode))
+                {
+                    detailedModes.Add(new StatisticsListGroup(
+                        $"Mods.ComprehensiveStatistics.UI.Movement.Modes.{mode}",
+                        details,
+                        nameIsLocalizationKey: true,
+                        metricDisplay: StatisticsMetricDisplay.Distance));
+                    continue;
+                }
+
+                if (mode == MovementModeKind.Other)
+                {
+                    continue;
+                }
+
+                basicModes.Add(new StatisticsListItem(
+                    $"Mods.ComprehensiveStatistics.UI.Movement.Modes.{mode}",
+                    itemType: 0,
+                    icon: null,
+                    events: 0L,
+                    units: 0L,
+                    amount: modeDistancePixels,
+                    source: StatisticsContentSource.Neutral,
+                    nameIsLocalizationKey: true,
+                    iconKind: StatisticsIconKind.None));
+            }
+
+            long otherDistancePixels = data?
+                .GetValue(StatisticKeys.GetMovementModeDistanceKey(MovementModeKind.Other))
+                .Amount ?? 0L;
+            // D1 只有总距离，无法回溯移动方式；与 D3 的其他有效位移统一显示为
+            // “其他或未分类”，避免两个含义高度重叠的兜底行。
+            long legacyUnclassifiedPixels = Math.Max(
+                distancePixels - classifiedDistancePixels,
+                0L);
+            otherDistancePixels = SaturatingAdd(
+                otherDistancePixels,
+                legacyUnclassifiedPixels);
+            basicModes.Add(new StatisticsListItem(
+                "Mods.ComprehensiveStatistics.UI.Movement.PreviouslyUnclassified",
+                itemType: 0,
+                icon: null,
+                events: 0L,
+                units: 0L,
+                amount: otherDistancePixels,
+                source: StatisticsContentSource.Neutral,
+                nameIsLocalizationKey: true,
+                iconKind: StatisticsIconKind.None));
+
+            return new[]
+            {
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Movement.MovementModes",
+                    basicModes,
+                    nameIsLocalizationKey: true,
+                    childGroups: detailedModes,
+                    metricDisplay: StatisticsMetricDisplay.Distance)
+            };
+        }
+
+        /// <summary>
+        /// 创建一个移动类别的物品明细，并返回无内容键数据与物品明细数据之和。
+        /// </summary>
+        private static List<StatisticsListItem> CreateMovementModeDetails(
+            StatisticsData data,
+            MovementModeKind mode,
+            out long totalAmount)
+        {
+            List<StatisticsListItem> items = new List<StatisticsListItem>();
+            StatisticKey baseKey = StatisticKeys.GetMovementModeDistanceKey(mode);
+            long unclassifiedAmount = data?.GetValue(baseKey).Amount ?? 0L;
+            totalAmount = unclassifiedAmount;
+
+            if (IsDetailedMovementMode(mode) && data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (!pair.Key.Content.HasValue
+                        || pair.Value.Amount <= 0L
+                        || !string.Equals(
+                            pair.Key.StatisticId,
+                            baseKey.StatisticId,
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    items.Add(CreateMovementItem(pair.Key.Content.Value, pair.Value.Amount));
+                    totalAmount = SaturatingAdd(totalAmount, pair.Value.Amount);
+                }
+
+                if (unclassifiedAmount > 0L)
+                {
+                    items.Add(new StatisticsListItem(
+                        mode == MovementModeKind.Jumping
+                            ? "Mods.ComprehensiveStatistics.UI.Movement.NormalOrUnclassifiedJump"
+                            : "Mods.ComprehensiveStatistics.UI.Movement.PreviouslyUnclassified",
+                        itemType: 0,
+                        icon: null,
+                        events: 0L,
+                        units: 0L,
+                        amount: unclassifiedAmount,
+                        source: StatisticsContentSource.Neutral,
+                        nameIsLocalizationKey: true,
+                        iconKind: StatisticsIconKind.None));
+                }
+            }
+
+            return items;
+        }
+
+        /// <summary>
+        /// 将移动来源物品的稳定内容键转换为带物品图标的距离叶子项。
+        /// </summary>
+        private static StatisticsListItem CreateMovementItem(
+            StableContentKey content,
+            long amount)
+        {
+            bool resolved = content.TryResolveItemType(out int itemType);
+            string name = resolved
+                ? Lang.GetItemNameValue(itemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Movement.MissingItemContent",
+                    content.ToString());
+            Asset<Texture2D> icon = resolved ? TextureAssets.Item[itemType] : null;
+
+            return new StatisticsListItem(
+                name,
+                itemType: resolved ? itemType : 0,
+                icon: icon,
+                events: 0L,
+                units: 0L,
+                amount: amount,
+                source: GetContentSource(content),
+                iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None);
+        }
+
+        /// <summary>
+        /// 判断移动类别是否在 UI 中按来源物品展开。
+        /// </summary>
+        private static bool IsDetailedMovementMode(MovementModeKind mode)
+        {
+            return mode == MovementModeKind.Minecart
+                || mode == MovementModeKind.OtherMount
+                || mode == MovementModeKind.RopeOrPulley
+                || mode == MovementModeKind.GrapplingHook
+                || mode == MovementModeKind.Flying
+                || mode == MovementModeKind.Jumping;
         }
 
         /// <summary>

@@ -55,6 +55,28 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 尝试从物品类型创建稳定内容键。
+        /// </summary>
+        internal static bool TryCreateForItem(int itemType, out StableContentKey key)
+        {
+            ModItem modItem = ItemLoader.GetItem(itemType);
+            if (modItem != null)
+            {
+                key = new StableContentKey(modItem.Mod.Name, modItem.Name);
+                return true;
+            }
+
+            if (ItemID.Search.TryGetName(itemType, out string contentName))
+            {
+                key = new StableContentKey("Terraria", contentName);
+                return true;
+            }
+
+            key = default;
+            return false;
+        }
+
+        /// <summary>
         /// 尝试从 Buff 类型创建稳定内容键。
         /// </summary>
         internal static bool TryCreateForBuff(int buffType, out StableContentKey key)
@@ -93,6 +115,26 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
 
             npcType = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试将稳定内容键解析为当前会话中的物品类型 ID。
+        /// </summary>
+        internal bool TryResolveItemType(out int itemType)
+        {
+            if (string.Equals(ModName, "Terraria", StringComparison.Ordinal))
+            {
+                return ItemID.Search.TryGetId(ContentName, out itemType);
+            }
+
+            if (ModContent.TryFind(ModName, ContentName, out ModItem modItem))
+            {
+                itemType = modItem.Type;
+                return true;
+            }
+
+            itemType = 0;
             return false;
         }
 

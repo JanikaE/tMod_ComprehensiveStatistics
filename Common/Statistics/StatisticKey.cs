@@ -28,10 +28,42 @@ namespace ComprehensiveStatistics.Common.Statistics
     }
 
     /// <summary>
+    /// 互斥移动类别；枚举顺序与移动页定义顺序一致，实际归因优先级由采集器明确执行。
+    /// </summary>
+    internal enum MovementModeKind
+    {
+        Minecart,
+        OtherMount,
+        RopeOrPulley,
+        GrapplingHook,
+        Flying,
+        Jumping,
+        Falling,
+        Walking,
+        Other
+    }
+
+    /// <summary>
     /// 集中定义正式统计键，使采集、存档和 UI 使用同一稳定标识。
     /// </summary>
     internal static class StatisticKeys
     {
+        internal static readonly StatisticKey TotalMovementDistance =
+            new StatisticKey("movement/total-distance");
+
+        private static readonly StatisticKey[] MovementModeDistanceKeys =
+        {
+            new StatisticKey("movement/distance/minecart"),
+            new StatisticKey("movement/distance/other-mount"),
+            new StatisticKey("movement/distance/rope-or-pulley"),
+            new StatisticKey("movement/distance/grappling-hook"),
+            new StatisticKey("movement/distance/flying"),
+            new StatisticKey("movement/distance/jumping"),
+            new StatisticKey("movement/distance/falling"),
+            new StatisticKey("movement/distance/walking"),
+            new StatisticKey("movement/distance/other")
+        };
+
         internal static readonly StatisticKey PlayerDeaths =
             new StatisticKey("survival/player-deaths");
 
@@ -58,6 +90,26 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal const string ContinuousDamageDebuffDeathStatisticId =
             "survival/player-deaths/continuous/debuff";
+
+        /// <summary>
+        /// 获取基础移动类别对应的距离统计键。
+        /// </summary>
+        internal static StatisticKey GetMovementModeDistanceKey(MovementModeKind mode)
+        {
+            return MovementModeDistanceKeys[(int)mode];
+        }
+
+        /// <summary>
+        /// 获取指定移动类别与来源物品对应的距离明细键。
+        /// </summary>
+        internal static StatisticKey GetMovementModeDistanceKey(
+            MovementModeKind mode,
+            StableContentKey content)
+        {
+            return new StatisticKey(
+                MovementModeDistanceKeys[(int)mode].StatisticId,
+                content);
+        }
 
         private static readonly StatisticKey[] DirectDamageSourceKeys =
         {

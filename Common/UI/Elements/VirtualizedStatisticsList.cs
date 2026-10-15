@@ -607,6 +607,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 StatisticsMetricDisplay.Amount => (
                     "Mods.ComprehensiveStatistics.UI.List.ValueColumn",
                     StatisticsListSortColumn.Amount),
+                StatisticsMetricDisplay.Distance => (
+                    "Mods.ComprehensiveStatistics.UI.List.DistanceColumn",
+                    StatisticsListSortColumn.Amount),
                 _ => (
                     "Mods.ComprehensiveStatistics.UI.List.MetricColumn",
                     StatisticsListSortColumn.Units)

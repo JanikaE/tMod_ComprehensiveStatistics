@@ -20,13 +20,13 @@ UI: {
 		DeathSourcesGroup: Death count
 		DirectDeathGroup: Direct damage
 		ContinuousDeathGroup: Damage over time
-		UnknownDeathSource: Other or previously unclassified
-		UnclassifiedNpcDeath: Other or previously unclassified
+		UnknownDeathSource: Other or unclassified
+		UnclassifiedNpcDeath: Other or unclassified
 		DirectDamageGroup: Direct damage
 		ContinuousLifeLossGroup: Damage over time
 		MultipleContinuousDamageEffects: Multiple damage-over-time effects
 		UnknownContinuousLifeLoss: Unknown
-		UnclassifiedNpcDamage: Other or previously unclassified
+		UnclassifiedNpcDamage: Other or unclassified
 		MissingNpcContent: Missing content: {0}
 		MissingBuffContent: Missing debuff: {0}
 
@@ -38,7 +38,25 @@ UI: {
 			Drowning: Drowning
 			Lava: Lava
 			TrapOrTile: Trap or tile
-			Other: Other or previously unclassified
+			Other: Other or unclassified
+		}
+	}
+
+	Movement: {
+		MovementModes: Total distance traveled
+		PreviouslyUnclassified: Other or unclassified
+		NormalOrUnclassifiedJump: Normal or unclassified jump
+		MissingItemContent: Missing content: {0}
+
+		Modes: {
+			Minecart: Minecart
+			OtherMount: Mount
+			RopeOrPulley: Rope
+			GrapplingHook: Grappling hook
+			Flying: Flying
+			Jumping: Jumping
+			Falling: Falling
+			Walking: Walking
 		}
 	}
 
@@ -94,10 +112,12 @@ UI: {
 		MetricColumn: Units / events
 		EventsColumn: Events
 		ValueColumn: Value
+		DistanceColumn: Distance
 		NoResults: No entries match the current filters
 		MetricFormat: "{0:N0} units / {1:N0} events"
 		EventsFormat: "{0:N0} events"
 		AmountFormat: "{0:N0}"
+		DistanceFormat: "{0:N2} tiles"
 		DemoPickupGroup: Temporary data: Item pickups
 		DemoUseGroup: Temporary data: Item uses
 		DemoModdedPickup: Modded item sample: Astral Fragment

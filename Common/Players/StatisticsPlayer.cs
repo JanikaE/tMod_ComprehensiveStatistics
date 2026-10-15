@@ -1,5 +1,6 @@
 using System;
 using ComprehensiveStatistics.Common.Statistics;
+using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.DataStructures;
 using Terraria.ID;
@@ -13,6 +14,20 @@ namespace ComprehensiveStatistics.Common.Players
     /// </summary>
     internal sealed class StatisticsPlayer : ModPlayer
     {
+        // 原版正常移动单帧不会跨越四格；更大的跳变视为传送或位置校正。
+        // 显式的 teleportTime 检查负责排除短距离传送，此阈值是兼容未知传送实现的兜底。
+        private const float MaximumTrackedMovementPerTick = 64f;
+
+        // 顺序是设计规定的归因优先级；静态数组避免在逐帧热路径中反复分配。
+        private static readonly MovementModeKind[] SpecialMovementModePriority =
+        {
+            MovementModeKind.Minecart,
+            MovementModeKind.OtherMount,
+            MovementModeKind.RopeOrPulley,
+            MovementModeKind.GrapplingHook,
+            MovementModeKind.Flying
+        };
+
         private Guid currentWorldId;
         private StatisticsData currentWorldSlice;
         private bool hasRecordedCurrentDeath;
@@ -23,6 +38,13 @@ namespace ComprehensiveStatistics.Common.Players
         private DirectDamageSourceKind pendingDirectDeathSource;
         private StableContentKey? pendingDirectDeathNpc;
         private StatisticKey? pendingContinuousDeathSource;
+        private bool hasMovementSnapshot;
+        private Vector2 previousMovementPosition;
+        private MovementModeKind previousMovementMode;
+        private bool hasPreMovementMode;
+        private MovementModeKind preMovementMode;
+        private StableContentKey? preMovementContent;
+        private double pendingMovementPixels;
 
         internal CharacterStatisticsData Data { get; private set; }
 
@@ -38,6 +60,7 @@ namespace ComprehensiveStatistics.Common.Players
             previousLifeSnapshot = 0;
             pendingDirectLifeLost = 0L;
             ClearPendingDeathSources();
+            ResetMovementTracking();
         }
 
         public override void OnEnterWorld()
@@ -45,6 +68,7 @@ namespace ComprehensiveStatistics.Common.Players
             EnsureCurrentWorldSlice();
             hasRecordedCurrentDeath = false;
             ResetLifeLossTracking();
+            ResetMovementTracking();
 
             // B2 临时验收计数只由所属客户端写入，进入世界一次即同时增长两个角色范围。
             if (IsOwnedByLocalClient)
@@ -80,6 +104,7 @@ namespace ComprehensiveStatistics.Common.Players
             previousLifeSnapshot = 0;
             pendingDirectLifeLost = 0L;
             ClearPendingDeathSources();
+            ResetMovementTracking();
         }
 
         public override void Kill(
@@ -162,13 +187,488 @@ namespace ComprehensiveStatistics.Common.Players
             if (IsOwnedByLocalClient)
             {
                 ReconcileLifeLoss();
+                TrackMovementDistance();
             }
+        }
+
+        public override void PreUpdateMovement()
+        {
+            if (!IsOwnedByLocalClient)
+            {
+                hasPreMovementMode = false;
+                preMovementContent = null;
+                return;
+            }
+
+            // 原版 GrappleMovement 已在此回调之前完成，钩爪数组仍代表本帧实际采用的
+            // 牵引状态；到 PostUpdate 时部分钩爪会清理该状态，因此必须在位移前快照。
+            preMovementMode = ClassifyCurrentMovementMode(out preMovementContent);
+            hasPreMovementMode = true;
         }
 
         public override void OnRespawn()
         {
             hasRecordedCurrentDeath = false;
             ResetLifeLossTracking();
+            ResetMovementTracking();
+        }
+
+        /// <summary>
+        /// 采样本帧结束位置并累计有效移动距离；传送和跨生命周期位置跳变只重建基准。
+        /// </summary>
+        private void TrackMovementDistance()
+        {
+            if (Main.gameMenu
+                || Main.gamePaused
+                || !Player.active
+                || Player.dead
+                || Player.ghost
+                || Player.teleportTime > 0)
+            {
+                // 暂停采样时丢弃位置基准，恢复后的第一帧不能连接到暂停前的位置。
+                hasMovementSnapshot = false;
+                hasPreMovementMode = false;
+                return;
+            }
+
+            Vector2 currentPosition = Player.position;
+            MovementModeKind currentMovementMode = ClassifyCurrentMovementMode(
+                out StableContentKey? currentMovementContent);
+            MovementModeKind movementModeBeforePositionUpdate = hasPreMovementMode
+                ? preMovementMode
+                : previousMovementMode;
+            StableContentKey? movementContentBeforePositionUpdate = hasPreMovementMode
+                ? preMovementContent
+                : null;
+            hasPreMovementMode = false;
+            preMovementContent = null;
+            if (!hasMovementSnapshot)
+            {
+                previousMovementPosition = currentPosition;
+                previousMovementMode = currentMovementMode;
+                hasMovementSnapshot = true;
+                return;
+            }
+
+            float distance = Vector2.Distance(previousMovementPosition, currentPosition);
+            Vector2 displacement = currentPosition - previousMovementPosition;
+            MovementModeKind movementMode = ClassifyMovementSegment(
+                movementModeBeforePositionUpdate,
+                currentMovementMode,
+                displacement.Y);
+            StableContentKey? movementContent = movementModeBeforePositionUpdate == movementMode
+                ? movementContentBeforePositionUpdate
+                : currentMovementMode == movementMode
+                    ? currentMovementContent
+                    : null;
+            previousMovementPosition = currentPosition;
+            previousMovementMode = currentMovementMode;
+
+            // NaN、Infinity 和异常跨度均不能污染长期存档；下一帧仍从当前位置继续。
+            if (!float.IsFinite(distance)
+                || distance <= 0f
+                || distance > MaximumTrackedMovementPerTick)
+            {
+                return;
+            }
+
+            // 逐帧保留亚像素精度，只把完整像素提交到 long 指标，避免对角移动的累计舍入偏差。
+            pendingMovementPixels += distance;
+            long completedPixels = pendingMovementPixels >= long.MaxValue
+                ? long.MaxValue
+                : (long)Math.Floor(pendingMovementPixels);
+            if (completedPixels <= 0L)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.TotalMovementDistance,
+                new StatisticMetrics(amount: completedPixels));
+            // 可解析的特殊移动只写物品明细；基础类别或无法解析的特殊来源写无内容键。
+            // UI 由两者共同计算分类合计，避免同时保存合计与明细形成两份真值。
+            StatisticKey movementKey = IsItemDetailedMovementMode(movementMode)
+                && movementContent.HasValue
+                    ? StatisticKeys.GetMovementModeDistanceKey(
+                        movementMode,
+                        movementContent.Value)
+                    : StatisticKeys.GetMovementModeDistanceKey(movementMode);
+            Record(movementKey, new StatisticMetrics(amount: completedPixels));
+            pendingMovementPixels -= completedPixels;
+        }
+
+        /// <summary>
+        /// 按当前速度和主动飞行状态生成帧末移动状态，供相邻位置之间的位移归类。
+        /// </summary>
+        private MovementModeKind ClassifyCurrentMovementMode(
+            out StableContentKey? content)
+        {
+            content = null;
+            // 特殊移动方式严格遵循设计优先级。矿车是 Mount 的子集，必须先判断。
+            if (Player.mount.Active)
+            {
+                MovementModeKind mountedMode = Player.mount.Cart
+                    ? MovementModeKind.Minecart
+                    : MovementModeKind.OtherMount;
+                TryResolveMovementItem(mountedMode, out content);
+                return mountedMode;
+            }
+
+            if (Player.pulley)
+            {
+                TryResolveMovementItem(MovementModeKind.RopeOrPulley, out content);
+                return MovementModeKind.RopeOrPulley;
+            }
+
+            if (Player.grapCount > 0
+                || (Player.grappling.Length > 0 && Player.grappling[0] >= 0))
+            {
+                TryResolveMovementItem(MovementModeKind.GrapplingHook, out content);
+                return MovementModeKind.GrapplingHook;
+            }
+
+            // wingTime 在落地时也会保持充满，因此必须同时要求离地、按住跳跃且有翼逻辑。
+            // jump 归零后原版才进入翼的飞行阶段，避免把普通起跳误记为飞行。
+            bool isAirborne = Math.Abs(Player.velocity.Y) > 0.01f;
+            bool isUsingWings = isAirborne
+                && Player.controlJump
+                && Player.jump == 0
+                && Player.wingsLogic > 0
+                && Player.wingTime > 0f;
+            // rocketTime 是落地后补满的剩余燃料，不能单独证明正在飞行；rocketDelay
+            // 只在火箭靴实际工作期间保持为正，能覆盖松键后的短暂推进阶段。
+            bool isUsingRocketBoots = isAirborne
+                && Player.rocketDelay > 0;
+            if (isUsingWings || isUsingRocketBoots)
+            {
+                TryResolveMovementItem(MovementModeKind.Flying, out content);
+                return MovementModeKind.Flying;
+            }
+
+            if (!isAirborne)
+            {
+                // 有水平速度的接地移动视为步行；无自身速度却发生位置变化的情况
+                // 交由“其他或未分类”兜底，例如平台或第三方模组直接移动玩家。
+                return Math.Abs(Player.velocity.X) > 0.01f
+                    ? MovementModeKind.Walking
+                    : MovementModeKind.Other;
+            }
+
+            return Player.velocity.Y * Player.gravDir > 0.01f
+                ? MovementModeKind.Falling
+                : ResolveJumpingMovement(out content);
+        }
+
+        /// <summary>
+        /// 将上升位移归为跳跃，并在原版额外跳跃生效时解析其来源饰品。
+        /// </summary>
+        private MovementModeKind ResolveJumpingMovement(out StableContentKey? content)
+        {
+            TryResolveMovementItem(MovementModeKind.Jumping, out content);
+            return MovementModeKind.Jumping;
+        }
+
+        /// <summary>
+        /// 尝试解析特殊移动状态实际使用的物品，以稳定内容键保存可展开明细。
+        /// </summary>
+        private bool TryResolveMovementItem(
+            MovementModeKind mode,
+            out StableContentKey? content)
+        {
+            int itemType = mode switch
+            {
+                MovementModeKind.Minecart => GetMiscEquipItemType(Player.miscSlotCart),
+                MovementModeKind.OtherMount => GetMiscEquipItemType(Player.miscSlotMount),
+                MovementModeKind.GrapplingHook => GetQuickGrappleItemType(),
+                MovementModeKind.Flying => FindFlightItemType(),
+                MovementModeKind.RopeOrPulley => FindRopeItemType(),
+                MovementModeKind.Jumping => FindActiveExtraJumpItemType(),
+                _ => 0
+            };
+
+            // 未装备专用矿车时原版仍允许使用默认木矿车，以对应物品作为稳定明细。
+            if (mode == MovementModeKind.Minecart && itemType == 0)
+            {
+                itemType = ItemID.Minecart;
+            }
+
+            if (itemType > ItemID.None
+                && StableContentKey.TryCreateForItem(itemType, out StableContentKey key))
+            {
+                content = key;
+                return true;
+            }
+
+            content = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 获取指定原版杂项装备槽中的物品类型。
+        /// </summary>
+        private int GetMiscEquipItemType(int slot)
+        {
+            return slot >= 0
+                && slot < Player.miscEquips.Length
+                && !Player.miscEquips[slot].IsAir
+                    ? Player.miscEquips[slot].type
+                    : 0;
+        }
+
+        /// <summary>
+        /// 按原版快速钩爪规则取得来源物品：优先装备槽，否则取背包前 58 格中的第一个钩爪。
+        /// </summary>
+        private int GetQuickGrappleItemType()
+        {
+            Item item = Player.QuickGrapple_GetItemToUse();
+            return item != null && !item.IsAir ? item.type : 0;
+        }
+
+        /// <summary>
+        /// 从功能装备槽中查找当前提供翅膀或火箭靴飞行效果的物品。
+        /// </summary>
+        private int FindFlightItemType()
+        {
+            // armor 的前半保存功能装备，后半为社交栏；不能让外观翅膀抢占统计来源。
+            int functionalSlotCount = Player.armor.Length / 2;
+            if (Player.wingsLogic > 0)
+            {
+                for (int index = 0; index < functionalSlotCount; index++)
+                {
+                    Item item = Player.armor[index];
+                    if (!item.IsAir && item.wingSlot == Player.wingsLogic)
+                    {
+                        return item.type;
+                    }
+                }
+            }
+
+            if (Player.rocketDelay > 0)
+            {
+                for (int index = 0; index < functionalSlotCount; index++)
+                {
+                    Item item = Player.armor[index];
+                    if (!item.IsAir && item.shoeSlot > 0 && item.shoeSlot == Player.shoe)
+                    {
+                        return item.type;
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 查找当前正在提供额外跳跃的原版功能饰品；普通跳跃与无法可靠映射的模组跳跃不猜测来源。
+        /// </summary>
+        private int FindActiveExtraJumpItemType()
+        {
+            ExtraJump activeJump = null;
+            foreach (ExtraJump jump in ExtraJumpLoader.OrderedJumps)
+            {
+                if (Player.GetJumpState(jump).Active)
+                {
+                    activeJump = jump;
+                    break;
+                }
+            }
+
+            if (activeJump == null)
+            {
+                return 0;
+            }
+
+            // armor 的前半保存功能装备，后半为社交栏；同类跳跃存在重复来源时按
+            // 原版装备栏顺序选择第一件，保证记录结果稳定且不受外观栏影响。
+            int functionalSlotCount = Player.armor.Length / 2;
+            for (int index = 0; index < functionalSlotCount; index++)
+            {
+                Item item = Player.armor[index];
+                if (!item.IsAir && ProvidesVanillaExtraJump(item.type, activeJump))
+                {
+                    return item.type;
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 判断一个原版饰品是否提供指定的原版额外跳跃，包括其气球、马掌与气球束合成形态。
+        /// </summary>
+        private static bool ProvidesVanillaExtraJump(int itemType, ExtraJump jump)
+        {
+            if (jump == ExtraJump.CloudInABottle)
+            {
+                return itemType == ItemID.CloudinaBottle
+                    || itemType == ItemID.CloudinaBalloon
+                    || itemType == ItemID.BlueHorseshoeBalloon
+                    || itemType == ItemID.BundleofBalloons
+                    || itemType == ItemID.HorseshoeBundle;
+            }
+
+            if (jump == ExtraJump.BlizzardInABottle)
+            {
+                return itemType == ItemID.BlizzardinaBottle
+                    || itemType == ItemID.BlizzardinaBalloon
+                    || itemType == ItemID.WhiteHorseshoeBalloon
+                    || itemType == ItemID.BundleofBalloons
+                    || itemType == ItemID.HorseshoeBundle;
+            }
+
+            if (jump == ExtraJump.SandstormInABottle)
+            {
+                return itemType == ItemID.SandstorminaBottle
+                    || itemType == ItemID.SandstorminaBalloon
+                    || itemType == ItemID.YellowHorseshoeBalloon
+                    || itemType == ItemID.BundleofBalloons
+                    || itemType == ItemID.HorseshoeBundle;
+            }
+
+            if (jump == ExtraJump.FartInAJar)
+            {
+                return itemType == ItemID.FartinaJar
+                    || itemType == ItemID.FartInABalloon
+                    || itemType == ItemID.BalloonHorseshoeFart;
+            }
+
+            if (jump == ExtraJump.TsunamiInABottle)
+            {
+                return itemType == ItemID.TsunamiInABottle
+                    || itemType == ItemID.SharkronBalloon
+                    || itemType == ItemID.BalloonHorseshoeSharkron;
+            }
+
+            if (jump == ExtraJump.Flipper)
+            {
+                return itemType == ItemID.Flipper
+                    || itemType == ItemID.DivingGear
+                    || itemType == ItemID.JellyfishDivingGear
+                    || itemType == ItemID.ArcticDivingGear
+                    || itemType == ItemID.FrogFlipper
+                    || itemType == ItemID.FrogGear;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 查找角色碰撞箱附近正在攀附的绳索物块所对应的掉落物品。
+        /// </summary>
+        private int FindRopeItemType()
+        {
+            int leftTile = Math.Max(1, (int)(Player.Left.X / 16f) - 1);
+            int rightTile = Math.Min(Main.maxTilesX - 2, (int)(Player.Right.X / 16f) + 1);
+            int topTile = Math.Max(1, (int)(Player.Top.Y / 16f) - 1);
+            int bottomTile = Math.Min(Main.maxTilesY - 2, (int)(Player.Bottom.Y / 16f) + 1);
+
+            for (int tileX = leftTile; tileX <= rightTile; tileX++)
+            {
+                for (int tileY = topTile; tileY <= bottomTile; tileY++)
+                {
+                    Tile tile = Framing.GetTileSafely(tileX, tileY);
+                    int tileType = tile.TileType;
+                    if (!tile.HasTile
+                        || tileType < 0
+                        || tileType >= Main.tileRope.Length
+                        || !Main.tileRope[tileType])
+                    {
+                        continue;
+                    }
+
+                    int style = Math.Max(tile.TileFrameX / 18, 0);
+                    int itemType = TileLoader.GetItemDropFromTypeAndStyle(tileType, style);
+                    if (itemType > ItemID.None)
+                    {
+                        return itemType;
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 根据位移两端状态与重力方向，为这一段实际路径选择唯一基础移动类别。
+        /// </summary>
+        private MovementModeKind ClassifyMovementSegment(
+            MovementModeKind previousMode,
+            MovementModeKind currentMode,
+            float verticalDisplacement)
+        {
+            // 位移两端可能正好发生状态切换；先按特殊移动优先级选择任一端的状态，
+            // 避免上车、下车或松开钩爪的边界帧被较低类别截走。
+            foreach (MovementModeKind specialMode in SpecialMovementModePriority)
+            {
+                if (previousMode == specialMode || currentMode == specialMode)
+                {
+                    return specialMode;
+                }
+            }
+
+            bool isAirborne = IsBasicAirborneMode(previousMode)
+                || IsBasicAirborneMode(currentMode);
+            if (!isAirborne)
+            {
+                // 坡面行走会改变 position.Y，但两端均接地时仍应归入步行。
+                return previousMode == MovementModeKind.Walking
+                        || currentMode == MovementModeKind.Walking
+                    ? MovementModeKind.Walking
+                    : MovementModeKind.Other;
+            }
+
+            float gravityAdjustedDisplacement = verticalDisplacement * Player.gravDir;
+            if (gravityAdjustedDisplacement > 0.01f)
+            {
+                return MovementModeKind.Falling;
+            }
+
+            if (gravityAdjustedDisplacement < -0.01f)
+            {
+                return MovementModeKind.Jumping;
+            }
+
+            // 跳跃顶点可能只有水平位移，此时沿用两端已有的空中方向而不退回步行。
+            return previousMode == MovementModeKind.Falling
+                    || currentMode == MovementModeKind.Falling
+                ? MovementModeKind.Falling
+                : MovementModeKind.Jumping;
+        }
+
+        /// <summary>
+        /// 判断一个基础状态是否表示未被特殊方式接管的空中移动。
+        /// </summary>
+        private static bool IsBasicAirborneMode(MovementModeKind mode)
+        {
+            return mode == MovementModeKind.Jumping
+                || mode == MovementModeKind.Falling;
+        }
+
+        /// <summary>
+        /// 判断移动类别是否要求按实际来源物品保存明细。
+        /// </summary>
+        private static bool IsItemDetailedMovementMode(MovementModeKind mode)
+        {
+            return mode == MovementModeKind.Minecart
+                || mode == MovementModeKind.OtherMount
+                || mode == MovementModeKind.RopeOrPulley
+                || mode == MovementModeKind.GrapplingHook
+                || mode == MovementModeKind.Flying
+                || mode == MovementModeKind.Jumping;
+        }
+
+        /// <summary>
+        /// 清除仅在当前连续活动阶段有效的位置基准与亚像素余量。
+        /// </summary>
+        private void ResetMovementTracking()
+        {
+            hasMovementSnapshot = false;
+            previousMovementPosition = Vector2.Zero;
+            previousMovementMode = default;
+            hasPreMovementMode = false;
+            preMovementMode = default;
+            preMovementContent = null;
+            pendingMovementPixels = 0d;
         }
 
         /// <summary>

@@ -34,6 +34,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         UnitsAndEvents,
         Events,
         Amount,
+        Distance,
         Mixed
     }
 
