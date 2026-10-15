@@ -17,6 +17,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     internal sealed class VirtualizedStatisticsList : UIElement
     {
         private const float RowHeight = 34f;
+        private const float ColumnHeaderHeight = 26f;
         private const float ScrollbarWidth = 18f;
         private const int OverscanRows = 2;
 
@@ -29,7 +30,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private readonly UIElement rowViewport;
         private readonly UIScrollbar scrollbar;
         private readonly UIText emptyText;
-        private StatisticsListSortMode sortMode;
+        private readonly List<SortHeader> columnHeaders = new List<SortHeader>();
+        private readonly Dictionary<string, bool> expansionStates = new Dictionary<string, bool>();
+        private StatisticsListSortColumn sortColumn = StatisticsListSortColumn.Name;
+        private StatisticsListSortDirection sortDirection;
         private string searchQuery = string.Empty;
         private StatisticsContentSourceFilter sourceFilter;
         private float lastViewportHeight = -1f;
@@ -46,11 +50,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             this.metricDisplay = metricDisplay;
 
             rowViewport = new UIElement();
-            rowViewport.Top.Set(0f, 0f);
+            rowViewport.Top.Set(ColumnHeaderHeight, 0f);
             rowViewport.Width.Set(-ScrollbarWidth - 4f, 1f);
-            rowViewport.Height.Set(0f, 1f);
+            rowViewport.Height.Set(-ColumnHeaderHeight, 1f);
             rowViewport.OverflowHidden = true;
             Append(rowViewport);
+
+            AppendColumnHeaders();
 
             emptyText = new UIText(
                 Language.GetText("Mods.ComprehensiveStatistics.UI.List.NoResults"),
@@ -61,12 +67,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             scrollbar = new UIScrollbar();
             scrollbar.Left.Set(-ScrollbarWidth, 1f);
-            scrollbar.Top.Set(0f, 0f);
+            scrollbar.Top.Set(ColumnHeaderHeight, 0f);
             scrollbar.Width.Set(ScrollbarWidth, 0f);
-            scrollbar.Height.Set(0f, 1f);
+            scrollbar.Height.Set(-ColumnHeaderHeight, 1f);
             Append(scrollbar);
 
-            SetSortMode(StatisticsListSortMode.ValueDescending);
+            ApplySort(resetScroll: true);
         }
 
         /// <summary>
@@ -74,23 +80,23 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         /// </summary>
         internal void SetGroups(IEnumerable<StatisticsListGroup> newGroups)
         {
+            CaptureExpansionStates(groups, parentPath: string.Empty);
             groups.Clear();
             groups.AddRange(newGroups);
-            SetSortMode(sortMode);
+            ApplyExpansionStates(groups, parentPath: string.Empty);
+            ApplySort(resetScroll: true);
         }
 
         /// <summary>
-        /// 设置排序方式，递归排序各分组中的叶子项。
+        /// 清除本次窗口会话的折叠与排序状态，并恢复各分组定义的默认状态。
         /// </summary>
-        internal void SetSortMode(StatisticsListSortMode newSortMode)
+        internal void ResetTransientState()
         {
-            sortMode = newSortMode;
-            foreach (StatisticsListGroup group in groups)
-            {
-                SortGroup(group, metricDisplay);
-            }
-
-            RebuildVisibleEntries(resetScroll: true);
+            expansionStates.Clear();
+            ResetExpansionStates(groups);
+            sortColumn = StatisticsListSortColumn.Name;
+            sortDirection = StatisticsListSortDirection.None;
+            ApplySort(resetScroll: true);
         }
 
         /// <summary>
@@ -131,6 +137,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             EnsureRowPool(viewportHeight);
             BindVisibleRows(viewportHeight);
             base.Update(gameTime);
+        }
+
+        public override void OnActivate()
+        {
+            base.OnActivate();
+            RefreshColumnHeaders();
         }
 
         /// <summary>
@@ -194,6 +206,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     row.BindGroup(
                         group.Name,
                         group.IsExpanded,
+                        group.ShowChildren,
                         entry.TotalEvents,
                         entry.TotalUnits,
                         entry.TotalAmount,
@@ -216,8 +229,63 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private void ToggleGroup(StatisticsListGroup group)
         {
             group.IsExpanded = !group.IsExpanded;
+            CaptureExpansionStates(groups, parentPath: string.Empty);
             RebuildVisibleEntries(resetScroll: false);
             SoundEngine.PlaySound(SoundID.MenuTick);
+        }
+
+        /// <summary>
+        /// 递归保存当前数据树的折叠状态；保留暂时不在新范围中的旧键以便稍后恢复。
+        /// </summary>
+        private void CaptureExpansionStates(
+            IEnumerable<StatisticsListGroup> sourceGroups,
+            string parentPath)
+        {
+            foreach (StatisticsListGroup group in sourceGroups)
+            {
+                string path = CreateGroupPath(parentPath, group.StateKey);
+                expansionStates[path] = group.IsExpanded;
+                CaptureExpansionStates(group.ChildGroups, path);
+            }
+        }
+
+        /// <summary>
+        /// 将本次窗口会话中保存的折叠状态应用到新生成的数据树。
+        /// </summary>
+        private void ApplyExpansionStates(
+            IEnumerable<StatisticsListGroup> targetGroups,
+            string parentPath)
+        {
+            foreach (StatisticsListGroup group in targetGroups)
+            {
+                string path = CreateGroupPath(parentPath, group.StateKey);
+                if (expansionStates.TryGetValue(path, out bool isExpanded))
+                {
+                    group.IsExpanded = isExpanded;
+                }
+
+                ApplyExpansionStates(group.ChildGroups, path);
+            }
+        }
+
+        /// <summary>
+        /// 递归恢复当前数据树中每个分组定义的默认折叠状态。
+        /// </summary>
+        private static void ResetExpansionStates(IEnumerable<StatisticsListGroup> sourceGroups)
+        {
+            foreach (StatisticsListGroup group in sourceGroups)
+            {
+                group.IsExpanded = group.DefaultIsExpanded;
+                ResetExpansionStates(group.ChildGroups);
+            }
+        }
+
+        /// <summary>
+        /// 使用本地化键或原始名称构造不受排序位置影响的分组状态路径。
+        /// </summary>
+        private static string CreateGroupPath(string parentPath, string stateKey)
+        {
+            return string.Concat(parentPath, "\u001f", stateKey);
         }
 
         /// <summary>
@@ -227,6 +295,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         {
             // 先递归构建过滤后的分组树，再按展开状态展平；父组合计始终来自可见叶子项。
             visibleEntries.Clear();
+            List<FilteredGroup> filteredGroups = new List<FilteredGroup>();
             foreach (StatisticsListGroup group in groups)
             {
                 FilteredGroup filteredGroup = BuildFilteredGroup(
@@ -234,43 +303,24 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     ancestorMatchesSearch: false);
                 if (filteredGroup != null)
                 {
-                    AppendDisplayGroup(filteredGroup, depth: 0, metricDisplay);
+                    filteredGroups.Add(filteredGroup);
                 }
+            }
+
+            // 无排序时保留数据定义顺序；启用列排序后，顶层分组也必须参与比较。
+            if (sortDirection != StatisticsListSortDirection.None)
+            {
+                filteredGroups.Sort(CompareFilteredGroups);
+            }
+            foreach (FilteredGroup filteredGroup in filteredGroups)
+            {
+                AppendDisplayGroup(filteredGroup, depth: 0, metricDisplay);
             }
 
             SetEmptyTextVisible(visibleEntries.Count == 0);
             if (resetScroll)
             {
                 scrollbar.ViewPosition = 0f;
-            }
-        }
-
-        /// <summary>
-        /// 按分组实际显示口径递归排序全部叶子项。
-        /// </summary>
-        private void SortGroup(
-            StatisticsListGroup group,
-            StatisticsMetricDisplay inheritedMetricDisplay)
-        {
-            StatisticsMetricDisplay resolvedMetricDisplay =
-                group.MetricDisplay ?? inheritedMetricDisplay;
-            Comparison<StatisticsListItem> comparison = sortMode switch
-            {
-                StatisticsListSortMode.ValueAscending =>
-                    (left, right) => CompareValueAscending(
-                        left,
-                        right,
-                        resolvedMetricDisplay),
-                StatisticsListSortMode.Name => CompareName,
-                _ => (left, right) => CompareValueDescending(
-                    left,
-                    right,
-                    resolvedMetricDisplay)
-            };
-            group.Items.Sort(comparison);
-            foreach (StatisticsListGroup childGroup in group.ChildGroups)
-            {
-                SortGroup(childGroup, resolvedMetricDisplay);
             }
         }
 
@@ -334,25 +384,44 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 filteredGroup.TotalAmount,
                 depth,
                 resolvedMetricDisplay));
-            if (!filteredGroup.Group.IsExpanded)
+            if (!filteredGroup.Group.IsExpanded || !filteredGroup.Group.ShowChildren)
             {
                 return;
             }
 
+            // 子分组和普通条目属于同一展示层级，必须放入同一序列比较，不能让分组固定靠前。
+            List<SiblingEntry> siblings = new List<SiblingEntry>(
+                filteredGroup.ChildGroups.Count + filteredGroup.Items.Count);
             foreach (FilteredGroup childGroup in filteredGroup.ChildGroups)
             {
-                AppendDisplayGroup(
-                    childGroup,
-                    depth + 1,
-                    resolvedMetricDisplay);
+                siblings.Add(SiblingEntry.ForGroup(childGroup));
             }
 
             foreach (StatisticsListItem item in filteredGroup.Items)
             {
-                visibleEntries.Add(DisplayEntry.ForItem(
-                    item,
-                    depth + 1,
-                    resolvedMetricDisplay));
+                siblings.Add(SiblingEntry.ForItem(item));
+            }
+
+            if (sortDirection != StatisticsListSortDirection.None)
+            {
+                siblings.Sort(CompareSiblingEntries);
+            }
+            foreach (SiblingEntry sibling in siblings)
+            {
+                if (sibling.Group != null)
+                {
+                    AppendDisplayGroup(
+                        sibling.Group,
+                        depth + 1,
+                        resolvedMetricDisplay);
+                }
+                else
+                {
+                    visibleEntries.Add(DisplayEntry.ForItem(
+                        sibling.Item,
+                        depth + 1,
+                        resolvedMetricDisplay));
+                }
             }
         }
 
@@ -418,52 +487,206 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 按显示数值降序比较叶子项，数值相同时按名称排序。
+        /// 按选中列比较两个顶层筛选分组。
         /// </summary>
-        private static int CompareValueDescending(
-            StatisticsListItem left,
-            StatisticsListItem right,
-            StatisticsMetricDisplay metricDisplay)
+        private int CompareFilteredGroups(FilteredGroup left, FilteredGroup right)
         {
-            int result = GetSortValue(right, metricDisplay).CompareTo(
-                GetSortValue(left, metricDisplay));
-            return result != 0 ? result : string.Compare(left.Name, right.Name, StringComparison.CurrentCulture);
+            return CompareRows(
+                left.Group.Name,
+                left.TotalEvents,
+                left.TotalUnits,
+                left.TotalAmount,
+                right.Group.Name,
+                right.TotalEvents,
+                right.TotalUnits,
+                right.TotalAmount);
         }
 
         /// <summary>
-        /// 按显示数值升序比较叶子项，数值相同时按名称排序。
+        /// 按选中列比较同一层级的分组行或普通条目行。
         /// </summary>
-        private static int CompareValueAscending(
-            StatisticsListItem left,
-            StatisticsListItem right,
-            StatisticsMetricDisplay metricDisplay)
+        private int CompareSiblingEntries(SiblingEntry left, SiblingEntry right)
         {
-            int result = GetSortValue(left, metricDisplay).CompareTo(
-                GetSortValue(right, metricDisplay));
-            return result != 0 ? result : string.Compare(left.Name, right.Name, StringComparison.CurrentCulture);
+            return CompareRows(
+                left.Name,
+                left.Events,
+                left.Units,
+                left.Amount,
+                right.Name,
+                right.Events,
+                right.Units,
+                right.Amount);
         }
 
         /// <summary>
-        /// 获取指定显示口径实际参与排序的数值。
+        /// 比较两行的名称或数值，并在数值相同时使用名称保证顺序确定。
+        /// </summary>
+        private int CompareRows(
+            string leftName,
+            long leftEvents,
+            long leftUnits,
+            long leftAmount,
+            string rightName,
+            long rightEvents,
+            long rightUnits,
+            long rightAmount)
+        {
+            int result = sortColumn == StatisticsListSortColumn.Name
+                ? string.Compare(leftName, rightName, StringComparison.CurrentCulture)
+                : GetSortValue(leftEvents, leftUnits, leftAmount, sortColumn).CompareTo(
+                    GetSortValue(rightEvents, rightUnits, rightAmount, sortColumn));
+            if (sortDirection == StatisticsListSortDirection.Descending)
+            {
+                result = -result;
+            }
+
+            return result != 0
+                ? result
+                : string.Compare(leftName, rightName, StringComparison.CurrentCulture);
+        }
+
+        /// <summary>
+        /// 获取指定列实际参与排序的数值。
         /// </summary>
         private static long GetSortValue(
-            StatisticsListItem item,
-            StatisticsMetricDisplay metricDisplay)
+            long events,
+            long units,
+            long amount,
+            StatisticsListSortColumn column)
         {
-            return metricDisplay switch
+            return column switch
             {
-                StatisticsMetricDisplay.Events => item.Events,
-                StatisticsMetricDisplay.Amount => item.Amount,
-                _ => item.Units
+                StatisticsListSortColumn.Events => events,
+                StatisticsListSortColumn.Amount => amount,
+                _ => units
             };
         }
 
         /// <summary>
-        /// 按当前区域性的名称顺序比较叶子项。
+        /// 为当前指标口径添加可点击的列标题。
         /// </summary>
-        private static int CompareName(StatisticsListItem left, StatisticsListItem right)
+        private void AppendColumnHeaders()
         {
-            return string.Compare(left.Name, right.Name, StringComparison.CurrentCulture);
+            string nameKey = metricDisplay == StatisticsMetricDisplay.Mixed
+                ? "Mods.ComprehensiveStatistics.UI.Survival.CategoryColumn"
+                : "Mods.ComprehensiveStatistics.UI.List.NameColumn";
+            float nameRightReserve = metricDisplay == StatisticsMetricDisplay.Mixed
+                ? 254f
+                : 160f;
+            AddColumnHeader(
+                nameKey,
+                StatisticsListSortColumn.Name,
+                leftPixels: 0f,
+                widthPixels: -nameRightReserve,
+                widthPercent: 1f);
+
+            if (metricDisplay == StatisticsMetricDisplay.Mixed)
+            {
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Survival.DeathsColumn",
+                    StatisticsListSortColumn.Events,
+                    leftPixels: -254f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Survival.LifeLostColumn",
+                    StatisticsListSortColumn.Amount,
+                    leftPixels: -138f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                return;
+            }
+
+            (string localizationKey, StatisticsListSortColumn column) = metricDisplay switch
+            {
+                StatisticsMetricDisplay.Events => (
+                    "Mods.ComprehensiveStatistics.UI.List.EventsColumn",
+                    StatisticsListSortColumn.Events),
+                StatisticsMetricDisplay.Amount => (
+                    "Mods.ComprehensiveStatistics.UI.List.ValueColumn",
+                    StatisticsListSortColumn.Amount),
+                _ => (
+                    "Mods.ComprehensiveStatistics.UI.List.MetricColumn",
+                    StatisticsListSortColumn.Units)
+            };
+            AddColumnHeader(
+                localizationKey,
+                column,
+                leftPixels: -160f,
+                widthPixels: 138f,
+                widthPercent: 0f,
+                leftPercent: 1f);
+        }
+
+        /// <summary>
+        /// 创建一个具有指定布局和排序字段的列标题。
+        /// </summary>
+        private void AddColumnHeader(
+            string localizationKey,
+            StatisticsListSortColumn column,
+            float leftPixels,
+            float widthPixels,
+            float widthPercent,
+            float leftPercent = 0f)
+        {
+            SortHeader header = new SortHeader(
+                localizationKey,
+                column,
+                SelectSortColumn);
+            header.Left.Set(leftPixels, leftPercent);
+            header.Width.Set(widthPixels, widthPercent);
+            header.Height.Set(ColumnHeaderHeight - 2f, 0f);
+            columnHeaders.Add(header);
+            Append(header);
+        }
+
+        /// <summary>
+        /// 选择列标题；同一列依次在正序、倒序和无排序之间循环。
+        /// </summary>
+        private void SelectSortColumn(StatisticsListSortColumn column)
+        {
+            if (sortColumn != column)
+            {
+                sortColumn = column;
+                sortDirection = StatisticsListSortDirection.Ascending;
+            }
+            else
+            {
+                sortDirection = sortDirection switch
+                {
+                    StatisticsListSortDirection.None => StatisticsListSortDirection.Ascending,
+                    StatisticsListSortDirection.Ascending => StatisticsListSortDirection.Descending,
+                    _ => StatisticsListSortDirection.None
+                };
+            }
+
+            ApplySort(resetScroll: true);
+            SoundEngine.PlaySound(SoundID.MenuTick);
+        }
+
+        /// <summary>
+        /// 应用当前列排序，并同步列标题方向标记与可见行。
+        /// </summary>
+        private void ApplySort(bool resetScroll)
+        {
+            RefreshColumnHeaders();
+            RebuildVisibleEntries(resetScroll);
+        }
+
+        /// <summary>
+        /// 刷新所有列标题的本地化文字和当前排序方向。
+        /// </summary>
+        private void RefreshColumnHeaders()
+        {
+            foreach (SortHeader header in columnHeaders)
+            {
+                header.Refresh(
+                    direction: header.Column == sortColumn
+                        ? sortDirection
+                        : StatisticsListSortDirection.None);
+            }
         }
 
         /// <summary>
@@ -472,6 +695,114 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private static long SaturatingAdd(long left, long right)
         {
             return left > long.MaxValue - right ? long.MaxValue : left + right;
+        }
+
+        /// <summary>
+        /// 可点击的列表列标题，负责显示当前排序方向并转发目标字段。
+        /// </summary>
+        private sealed class SortHeader : UIPanel
+        {
+            private readonly string localizationKey;
+            private readonly Action<StatisticsListSortColumn> clickAction;
+            private readonly UIText text;
+
+            /// <summary>
+            /// 创建绑定到指定排序字段的列标题。
+            /// </summary>
+            internal SortHeader(
+                string localizationKey,
+                StatisticsListSortColumn column,
+                Action<StatisticsListSortColumn> clickAction)
+            {
+                this.localizationKey = localizationKey;
+                this.clickAction = clickAction;
+                Column = column;
+
+                SetPadding(2f);
+                BorderColor = new Color(65, 84, 150, 220);
+                OnLeftClick += HandleClick;
+
+                text = new UIText(string.Empty, 0.7f);
+                text.HAlign = 0.5f;
+                text.VAlign = 0.5f;
+                text.TextColor = new Color(190, 204, 235);
+                Append(text);
+            }
+
+            internal StatisticsListSortColumn Column { get; }
+
+            /// <summary>
+            /// 使用当前语言和选择状态刷新标题文字。
+            /// </summary>
+            internal void Refresh(StatisticsListSortDirection direction)
+            {
+                string label = Language.GetTextValue(localizationKey);
+                text.SetText(direction switch
+                {
+                    StatisticsListSortDirection.Ascending => $"{label} ↑",
+                    StatisticsListSortDirection.Descending => $"{label} ↓",
+                    _ => label
+                });
+            }
+
+            public override void Update(GameTime gameTime)
+            {
+                BackgroundColor = IsMouseHovering
+                    ? new Color(54, 70, 129, 235)
+                    : new Color(35, 46, 86, 220);
+                base.Update(gameTime);
+            }
+
+            /// <summary>
+            /// 将点击转换为当前列的排序请求。
+            /// </summary>
+            private void HandleClick(UIMouseEvent evt, UIElement listeningElement)
+            {
+                clickAction(Column);
+            }
+        }
+
+        /// <summary>
+        /// 统一表示同一树层级中的筛选分组或普通条目，供两者混合排序。
+        /// </summary>
+        private sealed class SiblingEntry
+        {
+            /// <summary>
+            /// 创建一个分组或普通条目对应的同级排序节点。
+            /// </summary>
+            private SiblingEntry(FilteredGroup group, StatisticsListItem item)
+            {
+                Group = group;
+                Item = item;
+            }
+
+            internal FilteredGroup Group { get; }
+
+            internal StatisticsListItem Item { get; }
+
+            internal string Name => Group?.Group.Name ?? Item.Name;
+
+            internal long Events => Group?.TotalEvents ?? Item.Events;
+
+            internal long Units => Group?.TotalUnits ?? Item.Units;
+
+            internal long Amount => Group?.TotalAmount ?? Item.Amount;
+
+            /// <summary>
+            /// 创建携带筛选后合计的分组排序节点。
+            /// </summary>
+            internal static SiblingEntry ForGroup(FilteredGroup group)
+            {
+                return new SiblingEntry(group, item: null);
+            }
+
+            /// <summary>
+            /// 创建普通条目排序节点。
+            /// </summary>
+            internal static SiblingEntry ForItem(StatisticsListItem item)
+            {
+                return new SiblingEntry(group: null, item);
+            }
         }
 
         /// <summary>

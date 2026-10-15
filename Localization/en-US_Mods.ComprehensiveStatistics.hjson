@@ -14,12 +14,15 @@ UI: {
 	B2PersistenceTestCounter: B2 temporary test · World entries: {0:N0}
 
 	Survival: {
+		CategoryColumn: Category
+		DeathsColumn: Deaths
+		LifeLostColumn: Total life lost
 		DeathSourcesGroup: Death count
 		DirectDeathGroup: Direct damage
 		ContinuousDeathGroup: Damage over time
 		UnknownDeathSource: Other or previously unclassified
 		UnclassifiedNpcDeath: Other or previously unclassified
-		DirectDamageGroup: Total direct damage
+		DirectDamageGroup: Direct damage
 		ContinuousLifeLossGroup: Damage over time
 		MultipleContinuousDamageEffects: Multiple damage-over-time effects
 		UnknownContinuousLifeLoss: Unknown
@@ -87,14 +90,11 @@ UI: {
 	}
 
 	List: {
+		NameColumn: Name
 		MetricColumn: Units / events
 		EventsColumn: Events
-		AmountColumn: Life lost
 		ValueColumn: Value
 		NoResults: No entries match the current filters
-		SortDescending: Units ↓
-		SortAscending: Units ↑
-		SortName: Name A–Z
 		MetricFormat: "{0:N0} units / {1:N0} events"
 		EventsFormat: "{0:N0} events"
 		AmountFormat: "{0:N0}"
@@ -114,9 +114,6 @@ UI: {
 		ScopeWorldPublicDescription: Scope: public data for the current world.
 		ScopedTitleFormat: "{0} · {1}"
 		ScopedDescriptionFormat: "{0} {1}"
-		SortDescending: Units ↓
-		SortAscending: Units ↑
-		SortName: Name A–Z
 		SourceAll: All sources
 		SourceVanilla: Vanilla only
 		SourceModded: Modded only

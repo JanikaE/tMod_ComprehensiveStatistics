@@ -30,43 +30,37 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     }
 
     /// <summary>
-    /// 所有统计页共用的工具栏，集中维护范围、搜索、排序与内容来源筛选状态。
+    /// 所有统计页共用的工具栏，集中维护范围、搜索与内容来源筛选状态。
     /// </summary>
     internal sealed class StatisticsToolbar : UIElement
     {
         private const float RowHeight = 28f;
-        private const float RowGap = 6f;
         private const float ControlGap = 5f;
 
         private readonly Action<StatisticsViewScope> scopeChanged;
         private readonly Action<string, StatisticsContentSourceFilter> filtersChanged;
-        private readonly Action<StatisticsListSortMode> sortChanged;
         private readonly ToolbarButton scopeButton;
         private readonly UIPanel searchPanel;
         private readonly UISearchBar searchBar;
-        private readonly ToolbarButton sortButton;
         private readonly ToolbarButton sourceButton;
 
         private StatisticsViewScope scope = StatisticsViewScope.CharacterCareer;
-        private StatisticsListSortMode sortMode = StatisticsListSortMode.ValueDescending;
         private StatisticsContentSourceFilter sourceFilter = StatisticsContentSourceFilter.All;
         private bool worldPublicScopeAvailable = true;
         private string searchQuery = string.Empty;
         private float lastWidth = -1f;
 
         /// <summary>
-        /// 创建工具栏并绑定范围、筛选和排序状态变化回调。
+        /// 创建工具栏并绑定范围与筛选状态变化回调。
         /// </summary>
         internal StatisticsToolbar(
             Action<StatisticsViewScope> scopeChanged,
-            Action<string, StatisticsContentSourceFilter> filtersChanged,
-            Action<StatisticsListSortMode> sortChanged)
+            Action<string, StatisticsContentSourceFilter> filtersChanged)
         {
             this.scopeChanged = scopeChanged;
             this.filtersChanged = filtersChanged;
-            this.sortChanged = sortChanged;
 
-            Height.Set(RowHeight * 2f + RowGap, 0f);
+            Height.Set(RowHeight, 0f);
 
             scopeButton = new ToolbarButton(CycleScope);
             scopeButton.Top.Set(0f, 0f);
@@ -90,12 +84,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             searchBar.OnContentsChanged += SearchContentsChanged;
             searchPanel.Append(searchBar);
 
-            sortButton = new ToolbarButton(CycleSortMode);
-            sortButton.Top.Set(RowHeight + RowGap, 0f);
-            Append(sortButton);
-
             sourceButton = new ToolbarButton(CycleSourceFilter);
-            sourceButton.Top.Set(RowHeight + RowGap, 0f);
+            sourceButton.Top.Set(0f, 0f);
             Append(sourceButton);
 
         }
@@ -141,24 +131,32 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 根据可用宽度重新分配两行工具栏控件。
+        /// 根据可用宽度依次排列范围、内容来源和搜索控件。
         /// </summary>
         private void UpdateControlLayout(float width)
         {
-            // 第一行给范围按钮约三分之一宽度；第二行由排序和来源筛选平分。
-            float scopeWidth = MathHelper.Clamp(width * 0.34f, 96f, 190f);
-            scopeWidth = MathHelper.Min(scopeWidth, MathHelper.Max(1f, width - ControlGap - 90f));
+            // 两个按钮按各自文本需求分配宽度，并始终为右侧搜索框保留最小空间。
+            float scopeWidth = MathHelper.Clamp(width * 0.25f, 92f, 180f);
+            float sourceWidth = MathHelper.Clamp(width * 0.22f, 82f, 160f);
+            float availableButtonWidth = MathHelper.Max(
+                2f,
+                width - ControlGap * 2f - 90f);
+            if (scopeWidth + sourceWidth > availableButtonWidth)
+            {
+                float scale = availableButtonWidth / (scopeWidth + sourceWidth);
+                scopeWidth *= scale;
+                sourceWidth *= scale;
+            }
+
             scopeButton.Left.Set(0f, 0f);
             scopeButton.Width.Set(scopeWidth, 0f);
 
-            searchPanel.Left.Set(scopeWidth + ControlGap, 0f);
-            searchPanel.Width.Set(-(scopeWidth + ControlGap), 1f);
+            sourceButton.Left.Set(scopeWidth + ControlGap, 0f);
+            sourceButton.Width.Set(sourceWidth, 0f);
 
-            float halfWidth = MathHelper.Max(1f, (width - ControlGap) / 2f);
-            sortButton.Left.Set(0f, 0f);
-            sortButton.Width.Set(halfWidth, 0f);
-            sourceButton.Left.Set(halfWidth + ControlGap, 0f);
-            sourceButton.Width.Set(halfWidth, 0f);
+            float searchLeft = scopeWidth + ControlGap + sourceWidth + ControlGap;
+            searchPanel.Left.Set(searchLeft, 0f);
+            searchPanel.Width.Set(-searchLeft, 1f);
             Recalculate();
         }
 
@@ -198,23 +196,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             RefreshButtonLabels();
             scopeChanged(scope);
-        }
-
-        /// <summary>
-        /// 在降序、升序和名称排序之间循环切换。
-        /// </summary>
-        private void CycleSortMode()
-        {
-            StopSearchInput();
-            sortMode = sortMode switch
-            {
-                StatisticsListSortMode.ValueDescending => StatisticsListSortMode.ValueAscending,
-                StatisticsListSortMode.ValueAscending => StatisticsListSortMode.Name,
-                _ => StatisticsListSortMode.ValueDescending
-            };
-
-            RefreshButtonLabels();
-            sortChanged(sortMode);
         }
 
         /// <summary>
@@ -259,7 +240,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private void RefreshButtonLabels()
         {
             scopeButton.SetText(GetScopeText(scope));
-            sortButton.SetText(Language.GetTextValue(GetSortLocalizationKey(sortMode)));
             sourceButton.SetText(Language.GetTextValue(GetSourceLocalizationKey(sourceFilter)));
         }
 
@@ -291,21 +271,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeWorldPublicDescription",
                 _ => "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeCareerDescription"
             });
-        }
-
-        /// <summary>
-        /// 获取指定排序方式的本地化键。
-        /// </summary>
-        private static string GetSortLocalizationKey(StatisticsListSortMode mode)
-        {
-            return mode switch
-            {
-                StatisticsListSortMode.ValueAscending =>
-                    "Mods.ComprehensiveStatistics.UI.Toolbar.SortAscending",
-                StatisticsListSortMode.Name =>
-                    "Mods.ComprehensiveStatistics.UI.Toolbar.SortName",
-                _ => "Mods.ComprehensiveStatistics.UI.Toolbar.SortDescending"
-            };
         }
 
         /// <summary>

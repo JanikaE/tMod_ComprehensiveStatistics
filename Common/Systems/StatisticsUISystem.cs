@@ -80,6 +80,8 @@ namespace ComprehensiveStatistics.Common.Systems
 
             Main.playerInventory = false;
             selectedItemBeforeOpen = Main.LocalPlayer.selectedItem;
+            // 折叠和排序只属于一次窗口会话；切换 Tab 时保留，重新打开时恢复默认。
+            statisticsWindowState.ResetTransientViewState();
             statisticsWindowInterface.SetState(statisticsWindowState);
             SoundEngine.PlaySound(SoundID.MenuOpen);
         }

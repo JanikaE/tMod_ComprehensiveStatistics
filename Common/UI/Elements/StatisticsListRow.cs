@@ -20,14 +20,18 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private const float IconCenter = 14f;
         private const float NameLeft = 28f;
         private const float NameRightReserve = 138f;
+        private const float MixedNameRightReserve = 254f;
+        private const float MixedEventsRight = 132f;
 
         private readonly UIText markerText;
         private readonly UIElement nameContainer;
         private readonly UIText nameText;
+        private readonly UIText eventsText;
         private readonly UIText valueText;
         private Action clickAction;
         private Asset<Texture2D> icon;
-        private int itemType;
+        private int iconType;
+        private StatisticsIconKind iconKind;
         private bool isGroup;
         private float iconOffset = IconCenter;
 
@@ -55,6 +59,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             nameText.VAlign = 0.5f;
             nameContainer.Append(nameText);
 
+            eventsText = new UIText(string.Empty, 0.76f);
+            eventsText.Left.Set(-MixedEventsRight, 0f);
+            eventsText.HAlign = 1f;
+            eventsText.VAlign = 0.5f;
+            Append(eventsText);
+
             valueText = new UIText(string.Empty, 0.76f);
             valueText.Left.Set(-4f, 0f);
             valueText.HAlign = 1f;
@@ -68,6 +78,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal void BindGroup(
             string name,
             bool isExpanded,
+            bool canExpand,
             long totalEvents,
             long totalUnits,
             long totalAmount,
@@ -77,18 +88,20 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         {
             // 分组行不显示图标，左侧区域改为展开状态标记。
             isGroup = true;
-            clickAction = onClick;
-            itemType = 0;
+            clickAction = canExpand ? onClick : null;
+            iconType = 0;
+            iconKind = StatisticsIconKind.None;
             markerText.Left.Set(MarkerLeft + depth * HierarchyIndent, 0f);
-            markerText.SetText(isExpanded ? "▼" : "▶");
+            markerText.SetText(canExpand ? (isExpanded ? "▼" : "▶") : string.Empty);
             markerText.TextColor = new Color(225, 232, 255);
 
             icon = null;
 
-            SetNameIndent(depth);
+            SetNameIndent(depth, metricDisplay);
             nameText.SetText(name);
             nameText.TextColor = new Color(238, 241, 255);
-            valueText.SetText(FormatMetrics(totalUnits, totalEvents, totalAmount, metricDisplay));
+            SetMetrics(totalUnits, totalEvents, totalAmount, metricDisplay);
+            eventsText.TextColor = new Color(238, 241, 255);
             valueText.TextColor = new Color(238, 241, 255);
         }
 
@@ -105,15 +118,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             clickAction = null;
             markerText.SetText(string.Empty);
 
-            itemType = item.ItemType;
+            iconType = item.ItemType;
+            iconKind = item.IconKind;
             icon = item.Icon;
             iconOffset = IconCenter + depth * HierarchyIndent;
 
             // 同一层级的分组与普通条目共用文字起点；箭头或图标只占左侧槽位。
-            SetNameIndent(depth);
+            SetNameIndent(depth, metricDisplay);
             nameText.SetText(item.Name);
             nameText.TextColor = new Color(205, 214, 239);
-            valueText.SetText(FormatMetrics(item.Units, item.Events, item.Amount, metricDisplay));
+            SetMetrics(item.Units, item.Events, item.Amount, metricDisplay);
+            eventsText.TextColor = new Color(190, 200, 225);
             valueText.TextColor = new Color(190, 200, 225);
         }
 
@@ -124,9 +139,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         {
             // 行池中暂时无对应数据的控件必须清空，避免残留旧内容或点击动作。
             clickAction = null;
-            itemType = 0;
+            iconType = 0;
+            iconKind = StatisticsIconKind.None;
             markerText.SetText(string.Empty);
             nameText.SetText(string.Empty);
+            eventsText.SetText(string.Empty);
             valueText.SetText(string.Empty);
             icon = null;
         }
@@ -164,14 +181,14 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 backgroundRectangle,
                 BackgroundColor);
 
-            if (isGroup || icon?.IsLoaded != true)
+            if (isGroup || icon == null)
             {
                 return;
             }
 
+            // 只在虚拟化后的可见行访问 Value，使尚未出现过的内容贴图按需完成加载。
             Texture2D texture = icon.Value;
-            // 动画物品的源纹理包含多帧；统计列表固定展示第一帧。
-            Rectangle sourceRectangle = Main.itemAnimations[itemType]?.GetFrame(texture, 0) ?? texture.Bounds;
+            Rectangle sourceRectangle = GetFirstIconFrame(texture, iconType, iconKind);
             float scale = MathHelper.Min(
                 24f / sourceRectangle.Width,
                 24f / sourceRectangle.Height);
@@ -192,6 +209,31 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
+        /// 按物品、NPC 或 Buff 的贴图规则取得用于列表图标的第一帧。
+        /// </summary>
+        private static Rectangle GetFirstIconFrame(
+            Texture2D texture,
+            int contentType,
+            StatisticsIconKind kind)
+        {
+            if (kind == StatisticsIconKind.Item)
+            {
+                return Main.itemAnimations[contentType]?.GetFrame(texture, 0) ?? texture.Bounds;
+            }
+
+            if (kind == StatisticsIconKind.Npc)
+            {
+                int frameCount = contentType >= 0 && contentType < Main.npcFrameCount.Length
+                    ? Math.Max(1, Main.npcFrameCount[contentType])
+                    : 1;
+                return new Rectangle(0, 0, texture.Width, texture.Height / frameCount);
+            }
+
+            // Buff 图标是单帧贴图；未知类型也安全回退为完整贴图。
+            return texture.Bounds;
+        }
+
+        /// <summary>
         /// 将行点击转发给当前绑定分组的操作。
         /// </summary>
         private void HandleClick(UIMouseEvent evt, UIElement listeningElement)
@@ -202,11 +244,34 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         /// <summary>
         /// 按树层级设置统一的名称起点和剩余可用宽度。
         /// </summary>
-        private void SetNameIndent(int depth)
+        private void SetNameIndent(int depth, StatisticsMetricDisplay metricDisplay)
         {
             float left = NameLeft + depth * HierarchyIndent;
             nameContainer.Left.Set(left, 0f);
-            nameContainer.Width.Set(-left - NameRightReserve, 1f);
+            float rightReserve = metricDisplay == StatisticsMetricDisplay.Mixed
+                ? MixedNameRightReserve
+                : NameRightReserve;
+            nameContainer.Width.Set(-left - rightReserve, 1f);
+        }
+
+        /// <summary>
+        /// 按页面口径设置一个或两个数值列；生存页同时展示死亡次数与掉血总量。
+        /// </summary>
+        private void SetMetrics(
+            long units,
+            long events,
+            long amount,
+            StatisticsMetricDisplay metricDisplay)
+        {
+            if (metricDisplay == StatisticsMetricDisplay.Mixed)
+            {
+                eventsText.SetText(events.ToString("N0"));
+                valueText.SetText(amount.ToString("N0"));
+                return;
+            }
+
+            eventsText.SetText(string.Empty);
+            valueText.SetText(FormatMetrics(units, events, amount, metricDisplay));
         }
 
         /// <summary>

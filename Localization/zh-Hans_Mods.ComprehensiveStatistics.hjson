@@ -14,12 +14,15 @@ UI: {
 	B2PersistenceTestCounter: B2 临时测试 · 进入世界次数：{0:N0}
 
 	Survival: {
+		CategoryColumn: 分类
+		DeathsColumn: 死亡次数
+		LifeLostColumn: 掉血总量
 		DeathSourcesGroup: 死亡次数
 		DirectDeathGroup: 直接伤害
 		ContinuousDeathGroup: 持续伤害
 		UnknownDeathSource: 其他或此前未分类
 		UnclassifiedNpcDeath: 其他或此前未分类
-		DirectDamageGroup: 直接伤害总量
+		DirectDamageGroup: 直接伤害
 		ContinuousLifeLossGroup: 持续伤害
 		MultipleContinuousDamageEffects: 多个持续伤害效果
 		UnknownContinuousLifeLoss: 未知
@@ -87,14 +90,11 @@ UI: {
 	}
 
 	List: {
+		NameColumn: 名称
 		MetricColumn: 数量 / 次数
 		EventsColumn: 次数
-		AmountColumn: 实际掉血
 		ValueColumn: 数值
 		NoResults: 没有符合当前条件的条目
-		SortDescending: 数量 ↓
-		SortAscending: 数量 ↑
-		SortName: 名称 A–Z
 		MetricFormat: "{0:N0} 个 / {1:N0} 次"
 		EventsFormat: "{0:N0} 次"
 		AmountFormat: "{0:N0}"
@@ -114,9 +114,6 @@ UI: {
 		ScopeWorldPublicDescription: 范围：当前世界的公共数据。
 		ScopedTitleFormat: "{0} · {1}"
 		ScopedDescriptionFormat: "{0} {1}"
-		SortDescending: 数量 ↓
-		SortAscending: 数量 ↑
-		SortName: 名称 A–Z
 		SourceAll: 全部来源
 		SourceVanilla: 仅原版
 		SourceModded: 仅模组

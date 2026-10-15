@@ -6,13 +6,24 @@ using Terraria.Localization;
 namespace ComprehensiveStatistics.Common.UI.Elements
 {
     /// <summary>
-    /// 定义统计列表支持的数值与名称排序方式。
+    /// 定义统计列表可通过列标题选择的排序字段。
     /// </summary>
-    internal enum StatisticsListSortMode
+    internal enum StatisticsListSortColumn
     {
-        ValueDescending,
-        ValueAscending,
-        Name
+        Name,
+        Events,
+        Units,
+        Amount
+    }
+
+    /// <summary>
+    /// 定义列标题在无排序、正序和倒序之间的切换状态。
+    /// </summary>
+    internal enum StatisticsListSortDirection
+    {
+        None,
+        Ascending,
+        Descending
     }
 
     /// <summary>
@@ -37,6 +48,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     }
 
     /// <summary>
+    /// 指定统计条目图标贴图的内容类型，以便按对应帧规则裁切。
+    /// </summary>
+    internal enum StatisticsIconKind
+    {
+        None,
+        Item,
+        Npc,
+        Buff
+    }
+
+    /// <summary>
     /// 列表叶子项，只保存展示所需数据，不承担统计累计职责。
     /// </summary>
     internal sealed class StatisticsListItem
@@ -45,7 +67,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private readonly string localizationKey;
 
         /// <summary>
-        /// 创建一个可选带物品图标和延迟本地化名称的列表叶子项。
+        /// 创建一个可选带内容图标和延迟本地化名称的列表叶子项。
         /// </summary>
         internal StatisticsListItem(
             string name,
@@ -55,7 +77,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long units,
             long amount = 0L,
             StatisticsContentSource source = StatisticsContentSource.Vanilla,
-            bool nameIsLocalizationKey = false)
+            bool nameIsLocalizationKey = false,
+            StatisticsIconKind iconKind = StatisticsIconKind.Item)
         {
             if (nameIsLocalizationKey)
             {
@@ -69,6 +92,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             ItemType = itemType;
             Icon = icon;
+            IconKind = icon == null ? StatisticsIconKind.None : iconKind;
             Events = events;
             Units = units;
             Amount = amount;
@@ -82,6 +106,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal int ItemType { get; }
 
         internal Asset<Texture2D> Icon { get; }
+
+        internal StatisticsIconKind IconKind { get; }
 
         internal long Events { get; }
 
@@ -109,7 +135,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             bool isExpanded = true,
             bool nameIsLocalizationKey = false,
             IEnumerable<StatisticsListGroup> childGroups = null,
-            StatisticsMetricDisplay? metricDisplay = null)
+            StatisticsMetricDisplay? metricDisplay = null,
+            bool showChildren = true)
         {
             if (nameIsLocalizationKey)
             {
@@ -126,7 +153,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 ? new List<StatisticsListGroup>(childGroups)
                 : new List<StatisticsListGroup>();
             IsExpanded = isExpanded;
+            DefaultIsExpanded = isExpanded;
             MetricDisplay = metricDisplay;
+            ShowChildren = showChildren;
 
             CalculateTotals();
         }
@@ -175,6 +204,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
         internal bool IsExpanded { get; set; }
 
+        internal bool DefaultIsExpanded { get; }
+
+        internal string StateKey => localizationKey ?? name;
+
         internal StatisticsMetricDisplay? MetricDisplay { get; }
+
+        internal bool ShowChildren { get; }
     }
 }

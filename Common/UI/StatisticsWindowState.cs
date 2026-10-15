@@ -32,8 +32,8 @@ namespace ComprehensiveStatistics.Common.UI
         private const int ItemsTabIndex = 2;
         private const int SurvivalTabIndex = 8;
         private const float ToolbarTop = 38f;
-        private const float ToolbarHeight = 62f;
-        private const float ListTop = 108f;
+        private const float ToolbarHeight = 28f;
+        private const float ListTop = 74f;
 
         // 顺序同时决定导航显示顺序，键名用于拼接各 Tab 的本地化路径。
         private static readonly string[] TabLocalizationKeys =
@@ -82,6 +82,15 @@ namespace ComprehensiveStatistics.Common.UI
         private bool isSurvivalListAttached;
 
         internal bool IsWritingSearchText => toolbar?.IsWritingSearchText == true;
+
+        /// <summary>
+        /// 开始一次新的窗口会话，恢复各 Tab 列表默认的折叠与无排序状态。
+        /// </summary>
+        internal void ResetTransientViewState()
+        {
+            demoList?.ResetTransientState();
+            survivalList?.ResetTransientState();
+        }
 
         public override void OnInitialize()
         {
@@ -166,8 +175,7 @@ namespace ComprehensiveStatistics.Common.UI
 
             toolbar = new StatisticsToolbar(
                 HandleScopeChanged,
-                HandleFiltersChanged,
-                HandleSortChanged);
+                HandleFiltersChanged);
             toolbar.Top.Set(ToolbarTop, 0f);
             toolbar.Width.Set(0f, 1f);
             toolbar.Height.Set(ToolbarHeight, 0f);
@@ -350,15 +358,6 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 将公共排序方式同步到所有可切换的统计列表。
-        /// </summary>
-        private void HandleSortChanged(StatisticsListSortMode sortMode)
-        {
-            demoList.SetSortMode(sortMode);
-            survivalList.SetSortMode(sortMode);
-        }
-
-        /// <summary>
         /// 刷新当前页面标题、说明和统计起始时间。
         /// </summary>
         private void UpdatePageHeading()
@@ -502,91 +501,23 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 从一个统计范围创建生存页的死亡、直接伤害和持续伤害分组。
+        /// 从一个统计范围创建按伤害性质归类的三列生存统计。
         /// </summary>
         private static IEnumerable<StatisticsListGroup> CreateSurvivalGroups(StatisticsData data)
         {
-            List<StatisticsListGroup> groups = new List<StatisticsListGroup>();
             long totalDeaths = data?.GetValue(StatisticKeys.PlayerDeaths).Events ?? 0L;
-            groups.Add(CreateDeathSourceGroup(data, totalDeaths));
-            groups.AddRange(CreateDirectDamageGroups(data));
-            groups.Add(CreateContinuousLifeLossGroup(data));
-            return groups;
-        }
-
-        /// <summary>
-        /// 创建死亡来源树，并将未能由明细解释的历史差额归入未知来源。
-        /// </summary>
-        private static StatisticsListGroup CreateDeathSourceGroup(
-            StatisticsData data,
-            long totalDeaths)
-        {
-            Array sources = Enum.GetValues(typeof(DirectDamageSourceKind));
-            Dictionary<DirectDamageSourceKind, long> directDeaths =
-                new Dictionary<DirectDamageSourceKind, long>(sources.Length);
-            long classifiedDeaths = 0L;
-
-            foreach (DirectDamageSourceKind source in sources)
-            {
-                long events = data?
-                    .GetValue(StatisticKeys.GetDirectDeathSourceKey(source)).Events ?? 0L;
-                directDeaths[source] = events;
-                classifiedDeaths = SaturatingAdd(classifiedDeaths, events);
-            }
-
-            List<StatisticsListItem> directItems =
-                new List<StatisticsListItem>(sources.Length);
-            foreach (DirectDamageSourceKind source in sources)
-            {
-                if (source == DirectDamageSourceKind.NpcContact)
-                {
-                    continue;
-                }
-
-                directItems.Add(new StatisticsListItem(
-                    $"Mods.ComprehensiveStatistics.UI.Survival.DirectDamageSources.{source}",
-                    itemType: 0,
-                    icon: null,
-                    events: directDeaths[source],
-                    units: 0L,
-                    source: StatisticsContentSource.Neutral,
-                    nameIsLocalizationKey: true));
-            }
-
-            List<StatisticsListGroup> directChildGroups = new List<StatisticsListGroup>();
-            List<StatisticsListItem> npcItems = CreateNpcDeathItems(
+            StatisticsListGroup directGroup = CreateDirectSurvivalGroup(
                 data,
-                directDeaths[DirectDamageSourceKind.NpcContact]);
-            if (npcItems.Count > 0)
-            {
-                directChildGroups.Add(new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.Survival.DirectDamageSources.NpcContact",
-                    npcItems,
-                    isExpanded: false,
-                    nameIsLocalizationKey: true));
-            }
-
-            StatisticsListGroup directGroup = new StatisticsListGroup(
-                "Mods.ComprehensiveStatistics.UI.Survival.DirectDeathGroup",
-                directItems,
-                isExpanded: false,
-                nameIsLocalizationKey: true,
-                childGroups: directChildGroups);
-
-            List<StatisticsListItem> continuousItems = CreateContinuousDeathItems(
+                out long directDeaths);
+            StatisticsListGroup continuousGroup = CreateContinuousSurvivalGroup(
                 data,
                 out long continuousDeaths);
-            classifiedDeaths = SaturatingAdd(classifiedDeaths, continuousDeaths);
-            StatisticsListGroup continuousGroup = new StatisticsListGroup(
-                "Mods.ComprehensiveStatistics.UI.Survival.ContinuousDeathGroup",
-                continuousItems,
-                isExpanded: false,
-                nameIsLocalizationKey: true);
 
             long unknownDeaths = data?
                 .GetValue(StatisticKeys.UnknownDeathSource).Events ?? 0L;
+            long classifiedDeaths = SaturatingAdd(directDeaths, continuousDeaths);
             classifiedDeaths = SaturatingAdd(classifiedDeaths, unknownDeaths);
-            // 较早版本只记录死亡总数；无法回溯来源的差额必须保留为未知死亡。
+            // 较早版本只有死亡总数；无法回溯到直接或持续伤害的差额单列保留。
             if (totalDeaths > classifiedDeaths)
             {
                 unknownDeaths = SaturatingAdd(
@@ -594,79 +525,172 @@ namespace ComprehensiveStatistics.Common.UI
                     totalDeaths - classifiedDeaths);
             }
 
-            List<StatisticsListItem> rootItems = new List<StatisticsListItem>
-            {
-                new StatisticsListItem(
-                    "Mods.ComprehensiveStatistics.UI.Survival.UnknownDeathSource",
-                    itemType: 0,
-                    icon: null,
-                    events: unknownDeaths,
-                    units: 0L,
-                    source: StatisticsContentSource.Neutral,
-                    nameIsLocalizationKey: true)
-            };
-
-            return new StatisticsListGroup(
-                "Mods.ComprehensiveStatistics.UI.Survival.DeathSourcesGroup",
-                rootItems,
+            StatisticsListGroup unknownGroup = new StatisticsListGroup(
+                "Mods.ComprehensiveStatistics.UI.Survival.UnknownDeathSource",
+                new[]
+                {
+                    new StatisticsListItem(
+                        "Mods.ComprehensiveStatistics.UI.Survival.UnknownDeathSource",
+                        itemType: 0,
+                        icon: null,
+                        events: unknownDeaths,
+                        units: 0L,
+                        amount: 0L,
+                        source: StatisticsContentSource.Neutral,
+                        nameIsLocalizationKey: true)
+                },
                 nameIsLocalizationKey: true,
-                childGroups: new[] { directGroup, continuousGroup },
-                metricDisplay: StatisticsMetricDisplay.Events);
+                metricDisplay: StatisticsMetricDisplay.Mixed,
+                showChildren: false);
+
+            return new[] { directGroup, continuousGroup, unknownGroup };
         }
 
         /// <summary>
-        /// 创建 NPC 接触致死明细，并保留只有聚合值的旧版数据。
+        /// 创建直接伤害分类，并在同一行合并对应的死亡次数与掉血总量。
         /// </summary>
-        private static List<StatisticsListItem> CreateNpcDeathItems(
+        private static StatisticsListGroup CreateDirectSurvivalGroup(
             StatisticsData data,
-            long npcContactDeaths)
+            out long totalDeaths)
         {
+            Array sources = Enum.GetValues(typeof(DirectDamageSourceKind));
+            Dictionary<DirectDamageSourceKind, long> deaths =
+                new Dictionary<DirectDamageSourceKind, long>(sources.Length);
+            Dictionary<DirectDamageSourceKind, long> amounts =
+                new Dictionary<DirectDamageSourceKind, long>(sources.Length);
+            long classifiedAmount = 0L;
+            totalDeaths = 0L;
+
+            foreach (DirectDamageSourceKind source in sources)
+            {
+                long events = data?
+                    .GetValue(StatisticKeys.GetDirectDeathSourceKey(source)).Events ?? 0L;
+                long amount = data?
+                    .GetValue(StatisticKeys.GetDirectDamageSourceKey(source)).Amount ?? 0L;
+                deaths[source] = events;
+                amounts[source] = amount;
+                totalDeaths = SaturatingAdd(totalDeaths, events);
+                classifiedAmount = SaturatingAdd(classifiedAmount, amount);
+            }
+
+            // C1 只有直接掉血总量；无法追溯来源的历史差额归入直接伤害的“其他”。
+            long directTotal = data?.GetValue(StatisticKeys.DirectLifeLost).Amount ?? 0L;
+            if (directTotal > classifiedAmount)
+            {
+                amounts[DirectDamageSourceKind.Other] = SaturatingAdd(
+                    amounts[DirectDamageSourceKind.Other],
+                    directTotal - classifiedAmount);
+            }
+
+            List<StatisticsListItem> items = new List<StatisticsListItem>(sources.Length);
+            foreach (DirectDamageSourceKind source in sources)
+            {
+                // NPC 来源具有稳定内容键明细，由子分组承载，避免在父级重复求和。
+                if (source == DirectDamageSourceKind.NpcContact)
+                {
+                    continue;
+                }
+
+                items.Add(new StatisticsListItem(
+                    $"Mods.ComprehensiveStatistics.UI.Survival.DirectDamageSources.{source}",
+                    itemType: 0,
+                    icon: null,
+                    events: deaths[source],
+                    units: 0L,
+                    amount: amounts[source],
+                    source: StatisticsContentSource.Neutral,
+                    nameIsLocalizationKey: true));
+            }
+
+            List<StatisticsListGroup> childGroups = new List<StatisticsListGroup>();
+            List<StatisticsListItem> npcItems = CreateNpcSurvivalItems(
+                data,
+                deaths[DirectDamageSourceKind.NpcContact],
+                amounts[DirectDamageSourceKind.NpcContact]);
+            if (npcItems.Count > 0)
+            {
+                childGroups.Add(new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Survival.DirectDamageSources.NpcContact",
+                    npcItems,
+                    isExpanded: false,
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.Mixed));
+            }
+
+            return new StatisticsListGroup(
+                "Mods.ComprehensiveStatistics.UI.Survival.DirectDamageGroup",
+                items,
+                nameIsLocalizationKey: true,
+                childGroups: childGroups,
+                metricDisplay: StatisticsMetricDisplay.Mixed);
+        }
+
+        /// <summary>
+        /// 合并 NPC 接触伤害的死亡与掉血明细，并保留只有聚合值的旧版数据。
+        /// </summary>
+        private static List<StatisticsListItem> CreateNpcSurvivalItems(
+            StatisticsData data,
+            long npcContactDeaths,
+            long npcContactAmount)
+        {
+            Dictionary<StableContentKey, long> deaths = new Dictionary<StableContentKey, long>();
+            Dictionary<StableContentKey, long> amounts = new Dictionary<StableContentKey, long>();
+            HashSet<StableContentKey> contents = new HashSet<StableContentKey>();
             List<StatisticsListItem> items = new List<StatisticsListItem>();
             long detailedDeaths = 0L;
-            string statisticId = StatisticKeys
+            long detailedAmount = 0L;
+            string deathStatisticId = StatisticKeys
                 .GetDirectDeathSourceKey(DirectDamageSourceKind.NpcContact)
+                .StatisticId;
+            string damageStatisticId = StatisticKeys
+                .GetDirectDamageSourceKey(DirectDamageSourceKind.NpcContact)
                 .StatisticId;
 
             if (data != null)
             {
                 foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
                 {
-                    if (!pair.Key.Content.HasValue
-                        || !string.Equals(
-                            pair.Key.StatisticId,
-                            statisticId,
-                            StringComparison.Ordinal)
-                        || pair.Value.Events <= 0L)
+                    if (!pair.Key.Content.HasValue)
                     {
                         continue;
                     }
 
                     StableContentKey content = pair.Key.Content.Value;
-                    bool isResolved = content.TryResolveNpcType(out int npcType);
-                    string name = isResolved
-                        ? Lang.GetNPCNameValue(npcType)
-                        : Language.GetTextValue(
-                            "Mods.ComprehensiveStatistics.UI.Survival.MissingNpcContent",
-                            content.ToString());
-                    items.Add(new StatisticsListItem(
-                        name,
-                        itemType: 0,
-                        icon: null,
-                        events: pair.Value.Events,
-                        units: 0L,
-                        source: GetContentSource(content)));
-                    detailedDeaths = SaturatingAdd(detailedDeaths, pair.Value.Events);
+                    if (string.Equals(pair.Key.StatisticId, deathStatisticId, StringComparison.Ordinal)
+                        && pair.Value.Events > 0L)
+                    {
+                        deaths[content] = pair.Value.Events;
+                        contents.Add(content);
+                    }
+                    else if (string.Equals(pair.Key.StatisticId, damageStatisticId, StringComparison.Ordinal)
+                        && pair.Value.Amount > 0L)
+                    {
+                        amounts[content] = pair.Value.Amount;
+                        contents.Add(content);
+                    }
+                }
+
+                foreach (StableContentKey content in contents)
+                {
+                    deaths.TryGetValue(content, out long events);
+                    amounts.TryGetValue(content, out long amount);
+                    items.Add(CreateContentItem(content, isNpc: true, events, amount));
+                    detailedDeaths = SaturatingAdd(detailedDeaths, events);
+                    detailedAmount = SaturatingAdd(detailedAmount, amount);
                 }
             }
 
-            if (npcContactDeaths > detailedDeaths)
+            long unclassifiedDeaths = Math.Max(0L, npcContactDeaths - detailedDeaths);
+            long unclassifiedAmount = Math.Max(0L, npcContactAmount - detailedAmount);
+            if (unclassifiedDeaths > 0L || unclassifiedAmount > 0L)
             {
                 items.Add(new StatisticsListItem(
-                    "Mods.ComprehensiveStatistics.UI.Survival.UnclassifiedNpcDeath",
+                    "Mods.ComprehensiveStatistics.UI.Survival.UnclassifiedNpcDamage",
                     itemType: 0,
                     icon: null,
-                    events: npcContactDeaths - detailedDeaths,
+                    events: unclassifiedDeaths,
                     units: 0L,
+                    amount: unclassifiedAmount,
                     source: StatisticsContentSource.Neutral,
                     nameIsLocalizationKey: true));
             }
@@ -675,43 +699,51 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 创建持续生命流失致死明细，并返回其分类死亡总数。
+        /// 创建持续伤害分类，并按 Debuff 合并死亡次数与掉血总量。
         /// </summary>
-        private static List<StatisticsListItem> CreateContinuousDeathItems(
+        private static StatisticsListGroup CreateContinuousSurvivalGroup(
             StatisticsData data,
             out long totalDeaths)
         {
+            Dictionary<StableContentKey, long> deaths = new Dictionary<StableContentKey, long>();
+            Dictionary<StableContentKey, long> amounts = new Dictionary<StableContentKey, long>();
+            HashSet<StableContentKey> contents = new HashSet<StableContentKey>();
             List<StatisticsListItem> items = new List<StatisticsListItem>();
             totalDeaths = 0L;
             if (data != null)
             {
                 foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
                 {
-                    if (!pair.Key.Content.HasValue
-                        || !string.Equals(
-                            pair.Key.StatisticId,
-                            StatisticKeys.ContinuousDamageDebuffDeathStatisticId,
-                            StringComparison.Ordinal)
-                        || pair.Value.Events <= 0L)
+                    if (!pair.Key.Content.HasValue)
                     {
                         continue;
                     }
 
                     StableContentKey content = pair.Key.Content.Value;
-                    bool isResolved = content.TryResolveBuffType(out int buffType);
-                    string name = isResolved
-                        ? Lang.GetBuffName(buffType)
-                        : Language.GetTextValue(
-                            "Mods.ComprehensiveStatistics.UI.Survival.MissingBuffContent",
-                            content.ToString());
-                    items.Add(new StatisticsListItem(
-                        name,
-                        itemType: 0,
-                        icon: null,
-                        events: pair.Value.Events,
-                        units: 0L,
-                        source: GetContentSource(content)));
-                    totalDeaths = SaturatingAdd(totalDeaths, pair.Value.Events);
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ContinuousDamageDebuffDeathStatisticId,
+                        StringComparison.Ordinal) && pair.Value.Events > 0L)
+                    {
+                        deaths[content] = pair.Value.Events;
+                        contents.Add(content);
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ContinuousDamageDebuffStatisticId,
+                        StringComparison.Ordinal) && pair.Value.Amount > 0L)
+                    {
+                        amounts[content] = pair.Value.Amount;
+                        contents.Add(content);
+                    }
+                }
+
+                foreach (StableContentKey content in contents)
+                {
+                    deaths.TryGetValue(content, out long events);
+                    amounts.TryGetValue(content, out long amount);
+                    items.Add(CreateContentItem(content, isNpc: false, events, amount));
+                    totalDeaths = SaturatingAdd(totalDeaths, events);
                 }
             }
 
@@ -719,6 +751,10 @@ namespace ComprehensiveStatistics.Common.UI
                 .GetValue(StatisticKeys.MultipleContinuousDamageDeaths).Events ?? 0L;
             long unknownDeaths = data?
                 .GetValue(StatisticKeys.UnknownContinuousLifeLossDeaths).Events ?? 0L;
+            long multipleAmount = data?
+                .GetValue(StatisticKeys.MultipleContinuousDamageEffects).Amount ?? 0L;
+            long unknownAmount = data?
+                .GetValue(StatisticKeys.UnknownContinuousLifeLoss).Amount ?? 0L;
             totalDeaths = SaturatingAdd(totalDeaths, multipleDeaths);
             totalDeaths = SaturatingAdd(totalDeaths, unknownDeaths);
 
@@ -728,6 +764,7 @@ namespace ComprehensiveStatistics.Common.UI
                 icon: null,
                 events: multipleDeaths,
                 units: 0L,
+                amount: multipleAmount,
                 source: StatisticsContentSource.Neutral,
                 nameIsLocalizationKey: true));
             items.Add(new StatisticsListItem(
@@ -736,222 +773,69 @@ namespace ComprehensiveStatistics.Common.UI
                 icon: null,
                 events: unknownDeaths,
                 units: 0L,
+                amount: unknownAmount,
                 source: StatisticsContentSource.Neutral,
                 nameIsLocalizationKey: true));
-            return items;
-        }
-
-        /// <summary>
-        /// 创建直接生命损失来源树，并对旧版聚合数据执行兼容归类。
-        /// </summary>
-        private static IEnumerable<StatisticsListGroup> CreateDirectDamageGroups(StatisticsData data)
-        {
-            Array sources = Enum.GetValues(typeof(DirectDamageSourceKind));
-            Dictionary<DirectDamageSourceKind, long> amounts =
-                new Dictionary<DirectDamageSourceKind, long>(sources.Length);
-            long classifiedTotal = 0L;
-
-            foreach (DirectDamageSourceKind source in sources)
-            {
-                long amount = data?
-                    .GetValue(StatisticKeys.GetDirectDamageSourceKey(source)).Amount ?? 0L;
-                amounts[source] = amount;
-                classifiedTotal = SaturatingAdd(classifiedTotal, amount);
-            }
-
-            // C1 只保存直接掉血总量，无法回溯其来源。升级到 C2 后把差额放入明确的
-            // “其他/此前未分类”，从而保留旧数据并维持来源明细与总量一致。
-            long directTotal = data?.GetValue(StatisticKeys.DirectLifeLost).Amount ?? 0L;
-            if (directTotal > classifiedTotal)
-            {
-                amounts[DirectDamageSourceKind.Other] = SaturatingAdd(
-                    amounts[DirectDamageSourceKind.Other],
-                    directTotal - classifiedTotal);
-            }
-
-            List<StatisticsListItem> items = new List<StatisticsListItem>(sources.Length);
-            foreach (DirectDamageSourceKind source in sources)
-            {
-                // NPC 接触伤害由二级分组承载，不能再作为叶子项重复计入一级合计。
-                if (source == DirectDamageSourceKind.NpcContact)
-                {
-                    continue;
-                }
-
-                items.Add(new StatisticsListItem(
-                    $"Mods.ComprehensiveStatistics.UI.Survival.DirectDamageSources.{source}",
-                    itemType: 0,
-                    icon: null,
-                    events: 0L,
-                    units: 0L,
-                    amount: amounts[source],
-                    source: StatisticsContentSource.Neutral,
-                    nameIsLocalizationKey: true));
-            }
-
-            List<StatisticsListItem> npcItems = CreateNpcDirectDamageItems(
-                data,
-                amounts[DirectDamageSourceKind.NpcContact]);
-            List<StatisticsListGroup> sourceChildGroups = new List<StatisticsListGroup>();
-            if (npcItems.Count > 0)
-            {
-                sourceChildGroups.Add(new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.Survival.DirectDamageSources.NpcContact",
-                    npcItems,
-                    isExpanded: false,
-                    nameIsLocalizationKey: true));
-            }
-
-            return new[]
-            {
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.Survival.DirectDamageGroup",
-                    items,
-                    nameIsLocalizationKey: true,
-                    childGroups: sourceChildGroups,
-                    metricDisplay: StatisticsMetricDisplay.Amount)
-            };
-        }
-
-        /// <summary>
-        /// 创建按单一、多重和未知 Debuff 划分的持续生命损失分组。
-        /// </summary>
-        private static StatisticsListGroup CreateContinuousLifeLossGroup(StatisticsData data)
-        {
-            List<StatisticsListItem> items = new List<StatisticsListItem>();
-            if (data != null)
-            {
-                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
-                {
-                    if (!pair.Key.Content.HasValue
-                        || !string.Equals(
-                            pair.Key.StatisticId,
-                            StatisticKeys.ContinuousDamageDebuffStatisticId,
-                            StringComparison.Ordinal)
-                        || pair.Value.Amount <= 0L)
-                    {
-                        continue;
-                    }
-
-                    StableContentKey content = pair.Key.Content.Value;
-                    bool isResolved = content.TryResolveBuffType(out int buffType);
-                    string name = isResolved
-                        ? Lang.GetBuffName(buffType)
-                        : Language.GetTextValue(
-                            "Mods.ComprehensiveStatistics.UI.Survival.MissingBuffContent",
-                            content.ToString());
-                    StatisticsContentSource source = string.Equals(
-                        content.ModName,
-                        "Terraria",
-                        StringComparison.Ordinal)
-                            ? StatisticsContentSource.Vanilla
-                            : StatisticsContentSource.Modded;
-
-                    items.Add(new StatisticsListItem(
-                        name,
-                        itemType: 0,
-                        icon: null,
-                        events: 0L,
-                        units: 0L,
-                        amount: pair.Value.Amount,
-                        source: source));
-                }
-            }
-
-            items.Add(new StatisticsListItem(
-                "Mods.ComprehensiveStatistics.UI.Survival.MultipleContinuousDamageEffects",
-                itemType: 0,
-                icon: null,
-                events: 0L,
-                units: 0L,
-                amount: data?.GetValue(StatisticKeys.MultipleContinuousDamageEffects).Amount ?? 0L,
-                source: StatisticsContentSource.Neutral,
-                nameIsLocalizationKey: true));
-            items.Add(new StatisticsListItem(
-                "Mods.ComprehensiveStatistics.UI.Survival.UnknownContinuousLifeLoss",
-                itemType: 0,
-                icon: null,
-                events: 0L,
-                units: 0L,
-                amount: data?.GetValue(StatisticKeys.UnknownContinuousLifeLoss).Amount ?? 0L,
-                source: StatisticsContentSource.Neutral,
-                nameIsLocalizationKey: true));
-
             return new StatisticsListGroup(
                 "Mods.ComprehensiveStatistics.UI.Survival.ContinuousLifeLossGroup",
                 items,
                 nameIsLocalizationKey: true,
-                metricDisplay: StatisticsMetricDisplay.Amount);
+                metricDisplay: StatisticsMetricDisplay.Mixed);
         }
 
         /// <summary>
-        /// 创建 NPC 接触伤害明细，并补入无法追溯具体 NPC 的聚合差额。
+        /// 将一个 NPC 或 Debuff 稳定内容键转换为合并后的三列叶子项。
         /// </summary>
-        private static List<StatisticsListItem> CreateNpcDirectDamageItems(
-            StatisticsData data,
-            long npcContactTotal)
+        private static StatisticsListItem CreateContentItem(
+            StableContentKey content,
+            bool isNpc,
+            long events,
+            long amount)
         {
-            List<StatisticsListItem> items = new List<StatisticsListItem>();
-            long detailedTotal = 0L;
-            string npcStatisticId = StatisticKeys
-                .GetDirectDamageSourceKey(DirectDamageSourceKind.NpcContact)
-                .StatisticId;
-
-            if (data != null)
+            string name;
+            int iconType = 0;
+            Asset<Texture2D> icon = null;
+            StatisticsIconKind iconKind = StatisticsIconKind.None;
+            if (isNpc)
             {
-                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                bool resolved = content.TryResolveNpcType(out int npcType);
+                name = resolved
+                    ? Lang.GetNPCNameValue(npcType)
+                    : Language.GetTextValue(
+                        "Mods.ComprehensiveStatistics.UI.Survival.MissingNpcContent",
+                        content.ToString());
+                if (resolved)
                 {
-                    if (!pair.Key.Content.HasValue
-                        || !string.Equals(
-                            pair.Key.StatisticId,
-                            npcStatisticId,
-                            StringComparison.Ordinal)
-                        || pair.Value.Amount <= 0L)
-                    {
-                        continue;
-                    }
-
-                    StableContentKey content = pair.Key.Content.Value;
-                    bool isResolved = content.TryResolveNpcType(out int npcType);
-                    string name = isResolved
-                        ? Lang.GetNPCNameValue(npcType)
-                        : Language.GetTextValue(
-                            "Mods.ComprehensiveStatistics.UI.Survival.MissingNpcContent",
-                            content.ToString());
-                    StatisticsContentSource source = string.Equals(
-                        content.ModName,
-                        "Terraria",
-                        StringComparison.Ordinal)
-                            ? StatisticsContentSource.Vanilla
-                            : StatisticsContentSource.Modded;
-
-                    items.Add(new StatisticsListItem(
-                        name,
-                        itemType: 0,
-                        icon: null,
-                        events: 0L,
-                        units: 0L,
-                        amount: pair.Value.Amount,
-                        source: source));
-                    detailedTotal = SaturatingAdd(detailedTotal, pair.Value.Amount);
+                    iconType = npcType;
+                    icon = TextureAssets.Npc[npcType];
+                    iconKind = StatisticsIconKind.Npc;
+                }
+            }
+            else
+            {
+                bool resolved = content.TryResolveBuffType(out int buffType);
+                name = resolved
+                    ? Lang.GetBuffName(buffType)
+                    : Language.GetTextValue(
+                        "Mods.ComprehensiveStatistics.UI.Survival.MissingBuffContent",
+                        content.ToString());
+                if (resolved)
+                {
+                    iconType = buffType;
+                    icon = TextureAssets.Buff[buffType];
+                    iconKind = StatisticsIconKind.Buff;
                 }
             }
 
-            // C2 初版只有 NPC 聚合值；无法回溯到具体 NPC 的旧数据保留为未分类明细。
-            if (npcContactTotal > detailedTotal)
-            {
-                items.Add(new StatisticsListItem(
-                    "Mods.ComprehensiveStatistics.UI.Survival.UnclassifiedNpcDamage",
-                    itemType: 0,
-                    icon: null,
-                    events: 0L,
-                    units: 0L,
-                    amount: npcContactTotal - detailedTotal,
-                    source: StatisticsContentSource.Neutral,
-                    nameIsLocalizationKey: true));
-            }
-
-            return items;
+            return new StatisticsListItem(
+                name,
+                itemType: iconType,
+                icon: icon,
+                events: events,
+                units: 0L,
+                amount: amount,
+                source: GetContentSource(content),
+                iconKind: iconKind);
         }
 
         /// <summary>
