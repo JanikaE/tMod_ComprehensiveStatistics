@@ -74,13 +74,13 @@ namespace ComprehensiveStatistics.Common.UI
         private UIText contentDescription;
         private UIText statisticsStartedAt;
         private StatisticsToolbar toolbar;
-        private VirtualizedStatisticsList demoList;
+        private VirtualizedStatisticsList itemList;
         private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
         private UIImageButton closeButton;
         private int selectedTabIndex;
         private Point lastViewportSize;
-        private bool isDemoListAttached;
+        private bool isItemListAttached;
         private bool isMovementListAttached;
         private bool isSurvivalListAttached;
 
@@ -91,7 +91,7 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         internal void ResetTransientViewState()
         {
-            demoList?.ResetTransientState();
+            itemList?.ResetTransientState();
             movementList?.ResetTransientState();
             survivalList?.ResetTransientState();
         }
@@ -179,10 +179,12 @@ namespace ComprehensiveStatistics.Common.UI
             movementList.Width.Set(0f, 1f);
             movementList.Height.Set(-ListTop, 1f);
 
-            demoList = CreateDemoList();
-            demoList.Top.Set(ListTop, 0f);
-            demoList.Width.Set(0f, 1f);
-            demoList.Height.Set(-ListTop, 1f);
+            itemList = new VirtualizedStatisticsList(
+                CreateItemGroups(data: null),
+                StatisticsMetricDisplay.ItemActivity);
+            itemList.Top.Set(ListTop, 0f);
+            itemList.Width.Set(0f, 1f);
+            itemList.Height.Set(-ListTop, 1f);
 
             toolbar = new StatisticsToolbar(
                 HandleScopeChanged,
@@ -242,8 +244,7 @@ namespace ComprehensiveStatistics.Common.UI
             selectedTabIndex = tabIndex;
             toolbar.SetWorldPublicScopeAvailable(TabSupportsWorldPublicScope[tabIndex]);
             UpdatePageHeading();
-            // A4 临时列表仍只用于物品页；正式生存总计单独挂载到生存页。
-            SetDemoListVisible(tabIndex == ItemsTabIndex);
+            SetItemTotalsVisible(tabIndex == ItemsTabIndex);
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
             UpdateTabColors();
@@ -366,7 +367,7 @@ namespace ComprehensiveStatistics.Common.UI
             string searchQuery,
             StatisticsContentSourceFilter sourceFilter)
         {
-            demoList.SetFilters(searchQuery, sourceFilter);
+            itemList.SetFilters(searchQuery, sourceFilter);
             movementList.SetFilters(searchQuery, sourceFilter);
             survivalList.SetFilters(searchQuery, sourceFilter);
         }
@@ -437,6 +438,30 @@ namespace ComprehensiveStatistics.Common.UI
 
             UpdateSurvivalTotals(scope);
             UpdateMovementTotals(scope);
+            UpdateItemTotals(scope);
+        }
+
+        /// <summary>
+        /// 从当前角色范围重新生成物品页的拾取统计。
+        /// </summary>
+        private void UpdateItemTotals(StatisticsViewScope scope)
+        {
+            if (selectedTabIndex != ItemsTabIndex)
+            {
+                return;
+            }
+
+            if (scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                itemList.SetGroups(CreateItemGroups(data: null));
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            itemList.SetGroups(CreateItemGroups(scopeData));
         }
 
         /// <summary>
@@ -486,27 +511,155 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 按需挂载或移除物品页的临时验证列表。
+        /// 按需挂载物品统计列表，并在显示时刷新当前范围的数据。
         /// </summary>
-        private void SetDemoListVisible(bool visible)
+        private void SetItemTotalsVisible(bool visible)
         {
-            if (visible == isDemoListAttached)
+            if (visible == isItemListAttached)
             {
+                if (visible)
+                {
+                    UpdateItemTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
                 return;
             }
 
             if (visible)
             {
                 // 不可见时从 UI 树移除，避免隐藏列表继续接收输入和执行更新。
-                contentPanel.Append(demoList);
+                contentPanel.Append(itemList);
+                UpdateItemTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
             }
             else
             {
-                demoList.Remove();
+                itemList.Remove();
             }
 
-            isDemoListAttached = visible;
+            isItemListAttached = visible;
             contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 将一个统计范围中的物品拾取、使用与丢弃明细转换为按物品类型展示的列表分组。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateItemGroups(StatisticsData data)
+        {
+            Dictionary<StableContentKey, StatisticMetrics> metricsByItem =
+                new Dictionary<StableContentKey, StatisticMetrics>();
+            if (data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (!pair.Key.Content.HasValue)
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ItemPickupStatisticId,
+                        StringComparison.Ordinal)
+                        && (pair.Value.Events > 0L || pair.Value.Units > 0L))
+                    {
+                        AddItemMetrics(
+                            metricsByItem,
+                            pair.Key.Content.Value,
+                            new StatisticMetrics(units: pair.Value.Units));
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ItemUseStatisticId,
+                        StringComparison.Ordinal)
+                        && pair.Value.Events > 0L)
+                    {
+                        AddItemMetrics(
+                            metricsByItem,
+                            pair.Key.Content.Value,
+                            new StatisticMetrics(events: pair.Value.Events));
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ItemDiscardStatisticId,
+                        StringComparison.Ordinal)
+                        && (pair.Value.Events > 0L || pair.Value.Units > 0L))
+                    {
+                        AddItemMetrics(
+                            metricsByItem,
+                            pair.Key.Content.Value,
+                            new StatisticMetrics(amount: pair.Value.Units));
+                    }
+                }
+            }
+
+            List<StatisticsListItem> items = new List<StatisticsListItem>(metricsByItem.Count);
+            foreach (KeyValuePair<StableContentKey, StatisticMetrics> pair in metricsByItem)
+            {
+                items.Add(CreateItemStatisticsItem(
+                    pair.Key,
+                    pickupUnits: pair.Value.Units,
+                    useEvents: pair.Value.Events,
+                    discardUnits: pair.Value.Amount));
+            }
+
+            return new[]
+            {
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Items.CombinedGroup",
+                    items,
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.ItemActivity)
+            };
+        }
+
+        /// <summary>
+        /// 将同一物品的拾取数量、使用次数与丢弃数量合并到一个三列展示值中。
+        /// </summary>
+        private static void AddItemMetrics(
+            IDictionary<StableContentKey, StatisticMetrics> metricsByItem,
+            StableContentKey content,
+            StatisticMetrics metrics)
+        {
+            metricsByItem.TryGetValue(content, out StatisticMetrics current);
+            metricsByItem[content] = current.Add(metrics);
+        }
+
+        /// <summary>
+        /// 将物品稳定内容键转换为带物品图标的统计叶子项。
+        /// </summary>
+        private static StatisticsListItem CreateItemStatisticsItem(
+            StableContentKey content,
+            long pickupUnits,
+            long useEvents,
+            long discardUnits)
+        {
+            bool resolved = content.TryResolveItemType(out int itemType);
+            StatisticsContentSource source = GetContentSource(content);
+            string name = resolved
+                ? Lang.GetItemNameValue(itemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Items.MissingItemContent",
+                    content.ToString());
+            Asset<Texture2D> icon = null;
+            if (resolved)
+            {
+                Main.instance.LoadItem(itemType);
+                icon = TextureAssets.Item[itemType];
+            }
+
+            return new StatisticsListItem(
+                name,
+                itemType: resolved ? itemType : 0,
+                icon: icon,
+                events: useEvents,
+                units: pickupUnits,
+                amount: discardUnits,
+                source: source,
+                iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? itemType
+                    : null);
         }
 
         /// <summary>
@@ -753,6 +906,7 @@ namespace ComprehensiveStatistics.Common.UI
             long amount)
         {
             bool resolved = content.TryResolveItemType(out int itemType);
+            StatisticsContentSource source = GetContentSource(content);
             string name = resolved
                 ? Lang.GetItemNameValue(itemType)
                 : Language.GetTextValue(
@@ -774,8 +928,12 @@ namespace ComprehensiveStatistics.Common.UI
                 events: 0L,
                 units: 0L,
                 amount: amount,
-                source: GetContentSource(content),
-                iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None);
+                source: source,
+                iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? itemType
+                    : null);
         }
 
         /// <summary>
@@ -1039,8 +1197,10 @@ namespace ComprehensiveStatistics.Common.UI
         {
             string name;
             int iconType = 0;
+            int? vanillaContentId = null;
             Asset<Texture2D> icon = null;
             StatisticsIconKind iconKind = StatisticsIconKind.None;
+            StatisticsContentSource source = GetContentSource(content);
             if (isNpc)
             {
                 bool resolved = content.TryResolveNpcType(out int npcType);
@@ -1056,6 +1216,10 @@ namespace ComprehensiveStatistics.Common.UI
                     Main.instance.LoadNPC(npcType);
                     icon = TextureAssets.Npc[npcType];
                     iconKind = StatisticsIconKind.Npc;
+                    if (source == StatisticsContentSource.Vanilla)
+                    {
+                        vanillaContentId = npcType;
+                    }
                 }
             }
             else
@@ -1071,6 +1235,10 @@ namespace ComprehensiveStatistics.Common.UI
                     iconType = buffType;
                     icon = TextureAssets.Buff[buffType];
                     iconKind = StatisticsIconKind.Buff;
+                    if (source == StatisticsContentSource.Vanilla)
+                    {
+                        vanillaContentId = buffType;
+                    }
                 }
             }
 
@@ -1081,8 +1249,10 @@ namespace ComprehensiveStatistics.Common.UI
                 events: events,
                 units: 0L,
                 amount: amount,
-                source: GetContentSource(content),
-                iconKind: iconKind);
+                source: source,
+                iconKind: iconKind,
+                content: content,
+                vanillaContentId: vanillaContentId);
         }
 
         /// <summary>
@@ -1101,81 +1271,6 @@ namespace ComprehensiveStatistics.Common.UI
             return string.Equals(content.ModName, "Terraria", StringComparison.Ordinal)
                 ? StatisticsContentSource.Vanilla
                 : StatisticsContentSource.Modded;
-        }
-
-        /// <summary>
-        /// 创建用于验证虚拟化、排序和筛选行为的确定性临时物品列表。
-        /// </summary>
-        private static VirtualizedStatisticsList CreateDemoList()
-        {
-            // A4 仅使用确定性的临时数据验证组件；正式统计接入后会整体替换。
-            List<StatisticsListItem> pickupItems = new List<StatisticsListItem>();
-            List<StatisticsListItem> useItems = new List<StatisticsListItem>();
-
-            for (int itemType = 1; itemType <= 140; itemType++)
-            {
-                string itemName = Lang.GetItemNameValue(itemType);
-                if (string.IsNullOrWhiteSpace(itemName))
-                {
-                    continue;
-                }
-
-                // 每 17 项保留一个零值，确保列表始终不会渲染零值条目。
-                bool isZeroSample = itemType % 17 == 0;
-                long events = isZeroSample ? 0L : 1L + itemType * 17L % 251L;
-                long units = isZeroSample ? 0L : events + itemType * 113L % 12500L;
-                StatisticsListItem item = new StatisticsListItem(
-                    itemName,
-                    itemType,
-                    ModContent.Request<Texture2D>(
-                        $"Terraria/Images/Item_{itemType}",
-                        // 临时数据立即加载图标，避免虚拟行首次出现时短暂缺图。
-                        AssetRequestMode.ImmediateLoad),
-                    events,
-                    units);
-
-                if (itemType <= 70)
-                {
-                    pickupItems.Add(item);
-                }
-                else
-                {
-                    useItems.Add(item);
-                }
-            }
-
-            // 临时模组来源条目不伪装成原版物品，用于独立验证来源筛选和无图标行。
-            pickupItems.Add(new StatisticsListItem(
-                "Mods.ComprehensiveStatistics.UI.List.DemoModdedPickup",
-                itemType: 0,
-                icon: null,
-                events: 12L,
-                units: 345L,
-                source: StatisticsContentSource.Modded,
-                nameIsLocalizationKey: true));
-            useItems.Add(new StatisticsListItem(
-                "Mods.ComprehensiveStatistics.UI.List.DemoModdedUse",
-                itemType: 0,
-                icon: null,
-                events: 0L,
-                units: 0L,
-                source: StatisticsContentSource.Modded,
-                nameIsLocalizationKey: true));
-
-            StatisticsListGroup[] groups =
-            {
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.List.DemoPickupGroup",
-                    pickupItems,
-                    nameIsLocalizationKey: true),
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.List.DemoUseGroup",
-                    useItems,
-                    isExpanded: false,
-                    nameIsLocalizationKey: true)
-            };
-
-            return new VirtualizedStatisticsList(groups);
         }
 
         /// <summary>

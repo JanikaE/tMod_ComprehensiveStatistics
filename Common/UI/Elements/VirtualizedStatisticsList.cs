@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.Audio;
@@ -383,6 +385,18 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 result.AddTotals(item.Events, item.Units, item.Amount);
             }
 
+            if (sortDirection == StatisticsListSortDirection.None
+                && result.Items.Count > 1)
+            {
+                // OrderBy 是稳定排序：没有内容键的固定分类行彼此仍保持定义顺序。
+                // 带内容键的行统一遵循原版数字 ID、模组内部名的默认规则。
+                List<StatisticsListItem> defaultOrderedItems = result.Items
+                    .OrderBy(item => item, DefaultContentOrderComparer.Instance)
+                    .ToList();
+                result.Items.Clear();
+                result.Items.AddRange(defaultOrderedItems);
+            }
+
             return result.Items.Count == 0 && result.ChildGroups.Count == 0
                 ? null
                 : result;
@@ -591,9 +605,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             string nameKey = metricDisplay == StatisticsMetricDisplay.Mixed
                 ? "Mods.ComprehensiveStatistics.UI.Survival.CategoryColumn"
                 : "Mods.ComprehensiveStatistics.UI.List.NameColumn";
-            float nameRightReserve = metricDisplay == StatisticsMetricDisplay.Mixed
-                ? 254f
-                : 160f;
+            float nameRightReserve = metricDisplay switch
+            {
+                StatisticsMetricDisplay.Mixed => 254f,
+                StatisticsMetricDisplay.ItemActivity => 370f,
+                _ => 160f
+            };
             AddColumnHeader(
                 nameKey,
                 StatisticsListSortColumn.Name,
@@ -612,6 +629,32 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     leftPercent: 1f);
                 AddColumnHeader(
                     "Mods.ComprehensiveStatistics.UI.Survival.LifeLostColumn",
+                    StatisticsListSortColumn.Amount,
+                    leftPixels: -138f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
+            {
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Items.PickupUnitsColumn",
+                    StatisticsListSortColumn.Units,
+                    leftPixels: -370f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Items.UseEventsColumn",
+                    StatisticsListSortColumn.Events,
+                    leftPixels: -254f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Items.DiscardUnitsColumn",
                     StatisticsListSortColumn.Amount,
                     leftPixels: -138f,
                     widthPixels: 116f,
@@ -826,6 +869,82 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             internal static SiblingEntry ForItem(StatisticsListItem item)
             {
                 return new SiblingEntry(group: null, item);
+            }
+        }
+
+        /// <summary>
+        /// 比较未启用列排序时的内容行：原版按数字 ID，模组内容随后按内部名。
+        /// </summary>
+        private sealed class DefaultContentOrderComparer : IComparer<StatisticsListItem>
+        {
+            internal static readonly DefaultContentOrderComparer Instance =
+                new DefaultContentOrderComparer();
+
+            /// <summary>
+            /// 创建无状态的默认内容顺序比较器。
+            /// </summary>
+            private DefaultContentOrderComparer()
+            {
+            }
+
+            /// <summary>
+            /// 按内容来源和稳定标识比较两个叶子行；非内容行排在内容行之后并保持定义顺序。
+            /// </summary>
+            public int Compare(StatisticsListItem left, StatisticsListItem right)
+            {
+                bool leftHasContent = left.Content.HasValue;
+                bool rightHasContent = right.Content.HasValue;
+                if (leftHasContent != rightHasContent)
+                {
+                    return leftHasContent ? -1 : 1;
+                }
+
+                if (!leftHasContent)
+                {
+                    return 0;
+                }
+
+                StableContentKey leftContent = left.Content.Value;
+                StableContentKey rightContent = right.Content.Value;
+                bool leftIsVanilla = string.Equals(
+                    leftContent.ModName,
+                    "Terraria",
+                    StringComparison.Ordinal);
+                bool rightIsVanilla = string.Equals(
+                    rightContent.ModName,
+                    "Terraria",
+                    StringComparison.Ordinal);
+                if (leftIsVanilla != rightIsVanilla)
+                {
+                    return leftIsVanilla ? -1 : 1;
+                }
+
+                if (leftIsVanilla)
+                {
+                    int leftId = left.VanillaContentId ?? int.MaxValue;
+                    int rightId = right.VanillaContentId ?? int.MaxValue;
+                    int idComparison = leftId.CompareTo(rightId);
+                    if (idComparison != 0)
+                    {
+                        return idComparison;
+                    }
+
+                    return string.Compare(
+                        leftContent.ContentName,
+                        rightContent.ContentName,
+                        StringComparison.Ordinal);
+                }
+
+                int nameComparison = string.Compare(
+                    leftContent.ContentName,
+                    rightContent.ContentName,
+                    StringComparison.Ordinal);
+                return nameComparison != 0
+                    ? nameComparison
+                    : string.Compare(
+                        leftContent.ModName,
+                        rightContent.ModName,
+                        StringComparison.Ordinal);
             }
         }
 

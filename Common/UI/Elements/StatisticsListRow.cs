@@ -22,11 +22,18 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private const float NameRightReserve = 138f;
         private const float MixedNameRightReserve = 254f;
         private const float MixedEventsRight = 132f;
+        private const float ItemActivityNameRightReserve = 370f;
+        private const float ItemActivityPickupUnitsRight = 236f;
+        private const float ItemActivityUseEventsRight = 120f;
+
+        private static readonly Color DimmedGroupMetricColor = new Color(145, 154, 181);
+        private static readonly Color DimmedItemMetricColor = new Color(112, 122, 151);
 
         private readonly UIText markerText;
         private readonly UIElement nameContainer;
         private readonly UIText nameText;
         private readonly UIText eventsText;
+        private readonly UIText unitsText;
         private readonly UIText valueText;
         private Action clickAction;
         private Asset<Texture2D> icon;
@@ -67,6 +74,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             eventsText.VAlign = 0.5f;
             Append(eventsText);
 
+            unitsText = new UIText(string.Empty, 0.76f);
+            unitsText.Left.Set(-ItemActivityUseEventsRight, 0f);
+            unitsText.HAlign = 1f;
+            unitsText.VAlign = 0.5f;
+            Append(unitsText);
+
             valueText = new UIText(string.Empty, 0.76f);
             valueText.Left.Set(-4f, 0f);
             valueText.HAlign = 1f;
@@ -106,8 +119,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             nameText.SetText(name);
             nameText.TextColor = new Color(238, 241, 255);
             SetMetrics(totalUnits, totalEvents, totalAmount, metricDisplay);
-            eventsText.TextColor = new Color(238, 241, 255);
-            valueText.TextColor = new Color(238, 241, 255);
+            SetMetricColors(
+                totalUnits,
+                totalEvents,
+                totalAmount,
+                metricDisplay,
+                new Color(238, 241, 255),
+                DimmedGroupMetricColor);
         }
 
         /// <summary>
@@ -136,8 +154,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             nameText.SetText(item.Name);
             nameText.TextColor = new Color(205, 214, 239);
             SetMetrics(item.Units, item.Events, item.Amount, metricDisplay);
-            eventsText.TextColor = new Color(190, 200, 225);
-            valueText.TextColor = new Color(190, 200, 225);
+            SetMetricColors(
+                item.Units,
+                item.Events,
+                item.Amount,
+                metricDisplay,
+                new Color(190, 200, 225),
+                DimmedItemMetricColor);
         }
 
         /// <summary>
@@ -152,6 +175,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             markerText.SetText(string.Empty);
             nameText.SetText(string.Empty);
             eventsText.SetText(string.Empty);
+            unitsText.SetText(string.Empty);
             valueText.SetText(string.Empty);
             icon = null;
         }
@@ -283,14 +307,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         {
             float left = NameLeft + depth * HierarchyIndent;
             nameContainer.Left.Set(left, 0f);
-            float rightReserve = metricDisplay == StatisticsMetricDisplay.Mixed
-                ? MixedNameRightReserve
-                : NameRightReserve;
+            float rightReserve = metricDisplay switch
+            {
+                StatisticsMetricDisplay.Mixed => MixedNameRightReserve,
+                StatisticsMetricDisplay.ItemActivity => ItemActivityNameRightReserve,
+                _ => NameRightReserve
+            };
             nameContainer.Width.Set(-left - rightReserve, 1f);
         }
 
         /// <summary>
-        /// 按页面口径设置一个或两个数值列；生存页同时展示死亡次数与掉血总量。
+        /// 按页面口径设置一至三个数值列。
         /// </summary>
         private void SetMetrics(
             long units,
@@ -298,6 +325,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long amount,
             StatisticsMetricDisplay metricDisplay)
         {
+            if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
+            {
+                eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
+                eventsText.SetText(units.ToString("N0"));
+                unitsText.SetText(events.ToString("N0"));
+                valueText.SetText(amount.ToString("N0"));
+                return;
+            }
+
+            eventsText.Left.Set(-MixedEventsRight, 0f);
+            unitsText.SetText(string.Empty);
             if (metricDisplay == StatisticsMetricDisplay.Mixed)
             {
                 eventsText.SetText(events.ToString("N0"));
@@ -307,6 +345,34 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             eventsText.SetText(string.Empty);
             valueText.SetText(FormatMetrics(units, events, amount, metricDisplay));
+        }
+
+        /// <summary>
+        /// 对物品页和生存页的零值单元格分别使用弱化颜色。
+        /// </summary>
+        private void SetMetricColors(
+            long units,
+            long events,
+            long amount,
+            StatisticsMetricDisplay metricDisplay,
+            Color normalColor,
+            Color dimmedColor)
+        {
+            eventsText.TextColor = normalColor;
+            unitsText.TextColor = normalColor;
+            valueText.TextColor = normalColor;
+
+            if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
+            {
+                eventsText.TextColor = units == 0L ? dimmedColor : normalColor;
+                unitsText.TextColor = events == 0L ? dimmedColor : normalColor;
+                valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
+            }
+            else if (metricDisplay == StatisticsMetricDisplay.Mixed)
+            {
+                eventsText.TextColor = events == 0L ? dimmedColor : normalColor;
+                valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
+            }
         }
 
         /// <summary>

@@ -42,6 +42,14 @@ UI: {
 		}
 	}
 
+	Items: {
+		CombinedGroup: 物品统计
+		PickupUnitsColumn: 拾取数量
+		UseEventsColumn: 使用次数
+		DiscardUnitsColumn: 丢弃数量
+		MissingItemContent: 缺失内容：{0}
+	}
+
 	Movement: {
 		MovementModes: 总移动距离
 		PreviouslyUnclassified: 其他或未分类
@@ -73,7 +81,7 @@ UI: {
 
 		Items: {
 			Title: 物品
-			Description: 这里将显示物品拾取与物品使用统计。
+			Description: 这里将显示物品拾取、使用与丢弃统计。
 		}
 
 		Interactions: {
@@ -118,10 +126,6 @@ UI: {
 		EventsFormat: "{0:N0} 次"
 		AmountFormat: "{0:N0}"
 		DistanceFormat: "{0:N2} 格"
-		DemoPickupGroup: 临时数据：物品拾取
-		DemoUseGroup: 临时数据：物品使用
-		DemoModdedPickup: 模组物品示例：星辉碎片
-		DemoModdedUse: 模组物品零值示例
 	}
 
 	Toolbar: {

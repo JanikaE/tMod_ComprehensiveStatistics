@@ -42,6 +42,14 @@ UI: {
 		}
 	}
 
+	Items: {
+		CombinedGroup: Item statistics
+		PickupUnitsColumn: Units picked up
+		UseEventsColumn: Uses
+		DiscardUnitsColumn: Units discarded
+		MissingItemContent: Missing content: {0}
+	}
+
 	Movement: {
 		MovementModes: Total distance traveled
 		PreviouslyUnclassified: Other or unclassified
@@ -73,7 +81,7 @@ UI: {
 
 		Items: {
 			Title: Items
-			Description: Item pickup and item use statistics will appear here.
+			Description: Item pickup, use, and discard statistics will appear here.
 		}
 
 		Interactions: {
@@ -118,10 +126,6 @@ UI: {
 		EventsFormat: "{0:N0} events"
 		AmountFormat: "{0:N0}"
 		DistanceFormat: "{0:N2} tiles"
-		DemoPickupGroup: Temporary data: Item pickups
-		DemoUseGroup: Temporary data: Item uses
-		DemoModdedPickup: Modded item sample: Astral Fragment
-		DemoModdedUse: Zero-value modded item sample
 	}
 
 	Toolbar: {

@@ -48,6 +48,10 @@ namespace ComprehensiveStatistics.Common.Statistics
     /// </summary>
     internal static class StatisticKeys
     {
+        internal const string ItemPickupStatisticId = "items/pickups";
+        internal const string ItemUseStatisticId = "items/uses";
+        internal const string ItemDiscardStatisticId = "items/discards";
+
         internal static readonly StatisticKey TotalMovementDistance =
             new StatisticKey("movement/total-distance");
 
@@ -90,6 +94,30 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal const string ContinuousDamageDebuffDeathStatisticId =
             "survival/player-deaths/continuous/debuff";
+
+        /// <summary>
+        /// 获取指定物品对应的拾取统计键。
+        /// </summary>
+        internal static StatisticKey GetItemPickupKey(StableContentKey content)
+        {
+            return new StatisticKey(ItemPickupStatisticId, content);
+        }
+
+        /// <summary>
+        /// 获取指定物品对应的使用次数统计键。
+        /// </summary>
+        internal static StatisticKey GetItemUseKey(StableContentKey content)
+        {
+            return new StatisticKey(ItemUseStatisticId, content);
+        }
+
+        /// <summary>
+        /// 获取指定物品对应的彻底丢弃统计键。
+        /// </summary>
+        internal static StatisticKey GetItemDiscardKey(StableContentKey content)
+        {
+            return new StatisticKey(ItemDiscardStatisticId, content);
+        }
 
         /// <summary>
         /// 获取基础移动类别对应的距离统计键。

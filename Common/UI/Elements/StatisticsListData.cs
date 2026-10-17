@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
 using Terraria.Localization;
@@ -35,7 +36,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         Events,
         Amount,
         Distance,
-        Mixed
+        Mixed,
+        ItemActivity
     }
 
     /// <summary>
@@ -79,7 +81,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long amount = 0L,
             StatisticsContentSource source = StatisticsContentSource.Vanilla,
             bool nameIsLocalizationKey = false,
-            StatisticsIconKind iconKind = StatisticsIconKind.Item)
+            StatisticsIconKind iconKind = StatisticsIconKind.Item,
+            StableContentKey? content = null,
+            int? vanillaContentId = null)
         {
             if (nameIsLocalizationKey)
             {
@@ -98,6 +102,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             Units = units;
             Amount = amount;
             Source = source;
+            Content = content;
+            VanillaContentId = vanillaContentId;
         }
 
         internal string Name => localizationKey != null
@@ -117,6 +123,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal long Amount { get; }
 
         internal StatisticsContentSource Source { get; }
+
+        // 内容稳定键与原版数字 ID 只参与“无排序”状态下的统一默认顺序，
+        // 不影响名称列使用本地化显示名进行的显式排序。
+        internal StableContentKey? Content { get; }
+
+        internal int? VanillaContentId { get; }
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -45,6 +46,11 @@ namespace ComprehensiveStatistics.Common.Players
         private MovementModeKind preMovementMode;
         private StableContentKey? preMovementContent;
         private double pendingMovementPixels;
+        private bool hasActiveChanneledItemUse;
+        private int activeChanneledItemType;
+        private int activeChanneledAltFunctionUse;
+        private readonly List<PendingPickupObservation> pendingPickupObservations =
+            new List<PendingPickupObservation>();
 
         internal CharacterStatisticsData Data { get; private set; }
 
@@ -61,6 +67,8 @@ namespace ComprehensiveStatistics.Common.Players
             pendingDirectLifeLost = 0L;
             ClearPendingDeathSources();
             ResetMovementTracking();
+            ResetItemUseTracking();
+            pendingPickupObservations.Clear();
         }
 
         public override void OnEnterWorld()
@@ -69,6 +77,8 @@ namespace ComprehensiveStatistics.Common.Players
             hasRecordedCurrentDeath = false;
             ResetLifeLossTracking();
             ResetMovementTracking();
+            ResetItemUseTracking();
+            pendingPickupObservations.Clear();
 
             // B2 临时验收计数只由所属客户端写入，进入世界一次即同时增长两个角色范围。
             if (IsOwnedByLocalClient)
@@ -105,6 +115,8 @@ namespace ComprehensiveStatistics.Common.Players
             pendingDirectLifeLost = 0L;
             ClearPendingDeathSources();
             ResetMovementTracking();
+            ResetItemUseTracking();
+            pendingPickupObservations.Clear();
         }
 
         public override void Kill(
@@ -186,9 +198,118 @@ namespace ComprehensiveStatistics.Common.Players
         {
             if (IsOwnedByLocalClient)
             {
+                ReconcileItemPickups();
                 ReconcileLifeLoss();
                 TrackMovementDistance();
+                UpdateItemUseTracking();
             }
+        }
+
+        /// <summary>
+        /// 保存全局物品回调观察到的拾取前状态，延迟到原版入包逻辑完成后结算。
+        /// </summary>
+        internal void ObserveItemPickup(Item item)
+        {
+            if (!IsOwnedByLocalClient
+                || item == null
+                || item.stack <= 0
+                || !StableContentKey.TryCreateForItem(
+                    item.type,
+                    out StableContentKey content))
+            {
+                return;
+            }
+
+            // GlobalItem.OnPickup 位于原版实际入包逻辑之前；这里只保存世界物品状态，等 PostUpdate
+            // 根据世界槽位的剩余堆叠结算，才能排除背包已满时反复触发的无效拾取，
+            // 并准确处理一次只吸收部分堆叠的情况。
+            pendingPickupObservations.Add(new PendingPickupObservation(
+                item,
+                item.whoAmI,
+                item.type,
+                item.stack,
+                content));
+        }
+
+        /// <summary>
+        /// 为本地所属角色记录一次已经确认发生的物品使用。
+        /// </summary>
+        internal void RecordItemUse(Item item)
+        {
+            if (!IsOwnedByLocalClient
+                || item == null
+                || item.IsAir
+                || !StableContentKey.TryCreateForItem(
+                    item.type,
+                    out StableContentKey content))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetItemUseKey(content),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 为垃圾槽中已被覆盖、无法再取回的物品记录一次丢弃及其堆叠数量。
+        /// </summary>
+        internal void RecordItemDiscard(Item item)
+        {
+            if (!IsOwnedByLocalClient
+                || item == null
+                || item.IsAir
+                || item.stack <= 0
+                || !StableContentKey.TryCreateForItem(
+                    item.type,
+                    out StableContentKey content))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetItemDiscardKey(content),
+                new StatisticMetrics(events: 1L, units: item.stack));
+        }
+
+        /// <summary>
+        /// 记录一次物品动画周期，并将持续引导物品在按键释放前归并为同一次使用。
+        /// </summary>
+        internal void RecordItemUseAnimation(Item item)
+        {
+            if (!IsOwnedByLocalClient || item == null || item.IsAir)
+            {
+                return;
+            }
+
+            // ItemCheck_StartActualUse 会先执行 StartChanneling 再触发 UseAnimation，
+            // 因而这里能可靠识别标准引导入口。模组若在同一引导会话内手动再次调用
+            // ApplyItemAnimation，也会被同一物品类型和左右键模式组成的会话键拦截。
+            // Player.channel 也覆盖模组通过 Player.StartChanneling() 建立、但未静态设置
+            // Item.channel 的自定义维持型用法。
+            bool isChanneledUse = Player.channel;
+            int altFunctionUse = Player.altFunctionUse;
+            if (isChanneledUse)
+            {
+                if (hasActiveChanneledItemUse
+                    && activeChanneledItemType == item.type
+                    && activeChanneledAltFunctionUse == altFunctionUse)
+                {
+                    return;
+                }
+
+                hasActiveChanneledItemUse = true;
+                activeChanneledItemType = item.type;
+                activeChanneledAltFunctionUse = altFunctionUse;
+            }
+            else
+            {
+                // 非引导的多段攻击在同一动画内不会重复进入 UseAnimation；后续新动画
+                // 代表新的实际使用周期，必须继续逐周期计数，不能按按键状态合并。
+                ResetItemUseTracking();
+            }
+
+            RecordItemUse(item);
         }
 
         public override void PreUpdateMovement()
@@ -211,6 +332,29 @@ namespace ComprehensiveStatistics.Common.Players
             hasRecordedCurrentDeath = false;
             ResetLifeLossTracking();
             ResetMovementTracking();
+            ResetItemUseTracking();
+            pendingPickupObservations.Clear();
+        }
+
+        /// <summary>
+        /// 在持续引导结束后释放去重会话，使下一次按下能够正常计数。
+        /// </summary>
+        private void UpdateItemUseTracking()
+        {
+            if (!Player.channel)
+            {
+                ResetItemUseTracking();
+            }
+        }
+
+        /// <summary>
+        /// 清除仅在一次持续引导期间有效的物品使用去重状态。
+        /// </summary>
+        private void ResetItemUseTracking()
+        {
+            hasActiveChanneledItemUse = false;
+            activeChanneledItemType = 0;
+            activeChanneledAltFunctionUse = 0;
         }
 
         /// <summary>
@@ -672,6 +816,58 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 在原版入包逻辑完成后结算本帧拾取，只为实际离开世界物品堆叠的数量记一次事件。
+        /// </summary>
+        private void ReconcileItemPickups()
+        {
+            foreach (PendingPickupObservation observation in pendingPickupObservations)
+            {
+                int remainingStack = ResolveRemainingWorldStack(observation);
+                long pickedUnits = Math.Max(
+                    (long)observation.OriginalStack - remainingStack,
+                    0L);
+                if (pickedUnits <= 0L)
+                {
+                    continue;
+                }
+
+                Record(
+                    StatisticKeys.GetItemPickupKey(observation.Content),
+                    new StatisticMetrics(events: 1L, units: pickedUnits));
+            }
+
+            pendingPickupObservations.Clear();
+        }
+
+        /// <summary>
+        /// 取得回调对应世界物品在入包后的剩余数量；槽位被清空或替换表示原堆叠已全部处理。
+        /// </summary>
+        private static int ResolveRemainingWorldStack(PendingPickupObservation observation)
+        {
+            Item currentWorldItem = observation.WorldItemIndex >= 0
+                && observation.WorldItemIndex < Main.item.Length
+                    ? Main.item[observation.WorldItemIndex]
+                    : null;
+
+            if (ReferenceEquals(currentWorldItem, observation.ItemBeforePickup))
+            {
+                return Math.Clamp(
+                    observation.ItemBeforePickup.stack,
+                    0,
+                    observation.OriginalStack);
+            }
+
+            // 某些入包路径会以剩余物品替换世界槽位而不是原地修改实例。
+            if (currentWorldItem?.active == true
+                && currentWorldItem.type == observation.ItemType)
+            {
+                return Math.Clamp(currentWorldItem.stack, 0, observation.OriginalStack);
+            }
+
+            return 0;
+        }
+
+        /// <summary>
         /// 将一次统计增量提交到角色生涯及当前世界切片。
         /// </summary>
         internal void Record(StatisticKey key, StatisticMetrics delta)
@@ -901,5 +1097,38 @@ namespace ComprehensiveStatistics.Common.Players
 
         private bool IsOwnedByLocalClient =>
             Main.netMode != NetmodeID.Server && Player.whoAmI == Main.myPlayer;
+
+        /// <summary>
+        /// 保存一次 OnPickup 前的世界物品快照，供同帧结束时确认实际转移数量。
+        /// </summary>
+        private readonly struct PendingPickupObservation
+        {
+            /// <summary>
+            /// 创建一次待结算的世界物品拾取观察。
+            /// </summary>
+            internal PendingPickupObservation(
+                Item itemBeforePickup,
+                int worldItemIndex,
+                int itemType,
+                int originalStack,
+                StableContentKey content)
+            {
+                ItemBeforePickup = itemBeforePickup;
+                WorldItemIndex = worldItemIndex;
+                ItemType = itemType;
+                OriginalStack = originalStack;
+                Content = content;
+            }
+
+            internal Item ItemBeforePickup { get; }
+
+            internal int WorldItemIndex { get; }
+
+            internal int ItemType { get; }
+
+            internal int OriginalStack { get; }
+
+            internal StableContentKey Content { get; }
+        }
     }
 }
