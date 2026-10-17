@@ -302,7 +302,8 @@ namespace ComprehensiveStatistics.Common.UI
             float availableWidth = MathHelper.Max(1f, viewportWidth - WindowMargin * 2f);
             float availableHeight = MathHelper.Max(1f, viewportHeight - WindowMargin * 2f);
             float windowWidth = MathHelper.Min(920f, MathHelper.Max(460f, viewportWidth * 0.82f));
-            float windowHeight = MathHelper.Min(680f, MathHelper.Max(360f, viewportHeight * 0.82f));
+            // 为统计列表提供更多纵向空间；仍保留画布边距并在小分辨率下响应式收缩。
+            float windowHeight = MathHelper.Min(760f, MathHelper.Max(400f, viewportHeight * 0.9f));
             windowWidth = MathHelper.Min(windowWidth, availableWidth);
             windowHeight = MathHelper.Min(windowHeight, availableHeight);
 
@@ -757,7 +758,14 @@ namespace ComprehensiveStatistics.Common.UI
                 : Language.GetTextValue(
                     "Mods.ComprehensiveStatistics.UI.Movement.MissingItemContent",
                     content.ToString());
-            Asset<Texture2D> icon = resolved ? TextureAssets.Item[itemType] : null;
+            Asset<Texture2D> icon = null;
+            if (resolved)
+            {
+                // 原版物品贴图按需加载；直接访问数组时，尚未在本次会话出现过的
+                // 矿车、坐骑等内容可能仍是空槽位，导致历史统计行没有图标。
+                Main.instance.LoadItem(itemType);
+                icon = TextureAssets.Item[itemType];
+            }
 
             return new StatisticsListItem(
                 name,
@@ -1044,6 +1052,8 @@ namespace ComprehensiveStatistics.Common.UI
                 if (resolved)
                 {
                     iconType = npcType;
+                    // 原版 NPC 贴图同样是按需加载的，读取资产数组前必须显式加载。
+                    Main.instance.LoadNPC(npcType);
                     icon = TextureAssets.Npc[npcType];
                     iconKind = StatisticsIconKind.Npc;
                 }

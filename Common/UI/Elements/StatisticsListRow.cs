@@ -33,6 +33,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private int iconType;
         private StatisticsIconKind iconKind;
         private bool isGroup;
+        private int depth;
+        private bool useAlternateColor;
         private float iconOffset = IconCenter;
 
         /// <summary>
@@ -84,10 +86,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long totalAmount,
             StatisticsMetricDisplay metricDisplay,
             int depth,
+            bool useAlternateColor,
             Action onClick)
         {
             // 分组行不显示图标，左侧区域改为展开状态标记。
             isGroup = true;
+            this.depth = depth;
+            this.useAlternateColor = useAlternateColor;
             clickAction = canExpand ? onClick : null;
             iconType = 0;
             iconKind = StatisticsIconKind.None;
@@ -111,10 +116,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal void BindItem(
             StatisticsListItem item,
             StatisticsMetricDisplay metricDisplay,
-            int depth)
+            int depth,
+            bool useAlternateColor)
         {
             // 子项恢复图标缩进，并清除行池上一次绑定的分组点击动作。
             isGroup = false;
+            this.depth = depth;
+            this.useAlternateColor = useAlternateColor;
             clickAction = null;
             markerText.SetText(string.Empty);
 
@@ -150,20 +158,47 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
         public override void Update(GameTime gameTime)
         {
-            if (isGroup)
-            {
-                BackgroundColor = IsMouseHovering
-                    ? new Color(67, 86, 157, 245)
-                    : new Color(52, 67, 123, 235);
-            }
-            else
-            {
-                BackgroundColor = IsMouseHovering
-                    ? new Color(43, 56, 105, 235)
-                    : new Color(29, 38, 72, 215);
-            }
+            BackgroundColor = GetBackgroundColor(depth, useAlternateColor, IsMouseHovering);
 
             base.Update(gameTime);
+        }
+
+        /// <summary>
+        /// 为不同树层级提供清晰区分，同时让同级相邻行以接近色交替显示。
+        /// 所有色阶保持原有蓝紫色调，超过三级的内容沿用最深层颜色。
+        /// </summary>
+        private static Color GetBackgroundColor(
+            int rowDepth,
+            bool alternate,
+            bool isHovered)
+        {
+            int paletteIndex = Math.Min(Math.Max(rowDepth, 0), 3);
+            if (isHovered)
+            {
+                return (paletteIndex, alternate) switch
+                {
+                    (0, false) => new Color(82, 102, 184, 250),
+                    (0, true) => new Color(90, 111, 197, 250),
+                    (1, false) => new Color(59, 77, 143, 245),
+                    (1, true) => new Color(65, 84, 153, 245),
+                    (2, false) => new Color(44, 59, 111, 240),
+                    (2, true) => new Color(49, 65, 121, 240),
+                    (3, false) => new Color(35, 48, 92, 235),
+                    _ => new Color(40, 54, 101, 235)
+                };
+            }
+
+            return (paletteIndex, alternate) switch
+            {
+                (0, false) => new Color(57, 72, 135, 240),
+                (0, true) => new Color(64, 80, 148, 240),
+                (1, false) => new Color(40, 53, 101, 228),
+                (1, true) => new Color(45, 59, 111, 228),
+                (2, false) => new Color(28, 39, 76, 218),
+                (2, true) => new Color(32, 44, 84, 218),
+                (3, false) => new Color(22, 31, 62, 210),
+                _ => new Color(26, 36, 70, 210)
+            };
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch)

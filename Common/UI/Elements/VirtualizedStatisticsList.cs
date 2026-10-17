@@ -212,11 +212,16 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                         entry.TotalAmount,
                         entry.MetricDisplay,
                         entry.Depth,
+                        entry.UseAlternateColor,
                         () => ToggleGroup(group));
                 }
                 else
                 {
-                    row.BindItem(entry.Item, entry.MetricDisplay, entry.Depth);
+                    row.BindItem(
+                        entry.Item,
+                        entry.MetricDisplay,
+                        entry.Depth,
+                        entry.UseAlternateColor);
                 }
             }
 
@@ -317,10 +322,26 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 AppendDisplayGroup(filteredGroup, depth: 0, metricDisplay);
             }
 
+            ApplyAlternatingRowColors();
+
             SetEmptyTextVisible(visibleEntries.Count == 0);
             if (resetScroll)
             {
                 scrollbar.ViewPosition = 0f;
+            }
+        }
+
+        /// <summary>
+        /// 按树深度独立计算斑马纹，使每个层级都稳定地在两种近似色之间交替。
+        /// </summary>
+        private void ApplyAlternatingRowColors()
+        {
+            Dictionary<int, int> rowCountsByDepth = new Dictionary<int, int>();
+            foreach (DisplayEntry entry in visibleEntries)
+            {
+                rowCountsByDepth.TryGetValue(entry.Depth, out int rowCount);
+                entry.UseAlternateColor = rowCount % 2 != 0;
+                rowCountsByDepth[entry.Depth] = rowCount + 1;
             }
         }
 
@@ -884,6 +905,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             internal int Depth { get; }
 
             internal StatisticsMetricDisplay MetricDisplay { get; }
+
+            internal bool UseAlternateColor { get; set; }
 
             /// <summary>
             /// 创建携带筛选后合计的分组显示条目。
