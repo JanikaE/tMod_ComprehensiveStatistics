@@ -50,13 +50,15 @@ UI: {
 		MissingItemContent: 缺失内容：{0}
 	}
 
-	NPCs: {
+	Interactions: {
 		DialogueGroup: NPC 对话
-		FinalKillsGroup: 最终击杀
-		AssistsGroup: 协助击杀
-		WorldDeathsGroup: 世界实际死亡
-		ConversationStarted: 开始对话
+		BuffStationsGroup: 增益站
+		FurnitureGroup: 家具
+		ContainersGroup: 容器
+		UtilitiesGroup: 晶塔、钟和机关
+		MissingFacilityContent: 缺失设施：{0}
 		MissingNpcContent: 缺失内容：{0}
+		ConversationStarted: 开始对话
 
 		ChatButtons: {
 			ShopFirst: 商店（第一按钮）
@@ -76,6 +78,13 @@ UI: {
 			TavernkeepHelpSecond: 永恒水晶帮助（第二按钮）
 			CustomSecond: 自定义功能（第二按钮）
 		}
+	}
+
+	Kills: {
+		FinalKillsGroup: 最终击杀
+		AssistsGroup: 协助击杀
+		WorldDeathsGroup: 世界实际死亡
+		MissingNpcContent: 缺失内容：{0}
 	}
 
 	Economy: {
@@ -140,13 +149,13 @@ UI: {
 		}
 
 		Interactions: {
-			Title: 设施交互
-			Description: 这里将显示增益站、家具、容器、晶塔、钟和机关的交互统计。
+			Title: 交互
+			Description: 这里将显示 NPC 对话及按钮，以及增益站、家具、容器、晶塔、钟和机关的交互统计。
 		}
 
-		NPCs: {
-			Title: NPC
-			Description: 这里将显示 NPC 对话、击杀、协助和世界死亡统计。
+		Kills: {
+			Title: 击杀
+			Description: 这里将显示角色对 NPC 的最终击杀与协助，以及当前世界的 NPC 实际死亡统计。
 		}
 
 		Economy: {

@@ -120,6 +120,28 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 尝试从物块类型创建稳定内容键；设施与物块统计不能把运行时数字 ID 写入存档。
+        /// </summary>
+        internal static bool TryCreateForTileType(int tileType, out StableContentKey key)
+        {
+            ModTile modTile = TileLoader.GetTile(tileType);
+            if (modTile != null)
+            {
+                key = new StableContentKey(modTile.Mod.Name, modTile.Name);
+                return true;
+            }
+
+            if (TileID.Search.TryGetName(tileType, out string contentName))
+            {
+                key = new StableContentKey("Terraria", contentName);
+                return true;
+            }
+
+            key = default;
+            return false;
+        }
+
+        /// <summary>
         /// 尝试从持久化的“模组名/内容内部名”文本恢复稳定内容键。
         /// </summary>
         internal static bool TryParse(string value, out StableContentKey key)
@@ -194,6 +216,26 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
 
             buffType = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试将稳定内容键解析为当前会话中的物块类型 ID。
+        /// </summary>
+        internal bool TryResolveTileType(out int tileType)
+        {
+            if (string.Equals(ModName, "Terraria", StringComparison.Ordinal))
+            {
+                return TileID.Search.TryGetId(ContentName, out tileType);
+            }
+
+            if (ModContent.TryFind(ModName, ContentName, out ModTile modTile))
+            {
+                tileType = modTile.Type;
+                return true;
+            }
+
+            tileType = 0;
             return false;
         }
 

@@ -97,6 +97,7 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string NpcWorldDeathStatisticId = "npcs/world-deaths";
         internal const string FishingItemCatchStatisticId = "fishing/catches/items";
         internal const string FishingNpcCatchStatisticId = "fishing/catches/npcs";
+        internal const string FacilityInteractionStatisticId = "interactions/facilities";
 
         internal static readonly StatisticKey FishingSuccessfulCatches =
             new StatisticKey("fishing/successful-catches");
@@ -358,6 +359,45 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal static StatisticKey GetFishingLiquidCatchKey(FishingLiquidKind liquid)
         {
             return FishingLiquidCatchKeys[(int)liquid];
+        }
+
+        /// <summary>
+        /// 获取指定规范化物块内容与样式对应的设施交互统计键。
+        /// </summary>
+        internal static StatisticKey GetFacilityInteractionKey(FacilityDefinition definition)
+        {
+            if (definition == null)
+            {
+                throw new ArgumentNullException(nameof(definition));
+            }
+
+            return new StatisticKey(
+                $"{FacilityInteractionStatisticId}/{definition.Category}",
+                definition.Content,
+                definition.Style);
+        }
+
+        /// <summary>
+        /// 从设施交互统计标识恢复一级分类；分类写入标识后即使定义暂时缺失也能正确分组。
+        /// </summary>
+        internal static bool TryParseFacilityCategory(
+            string statisticId,
+            out FacilityCategory category)
+        {
+            string prefix = FacilityInteractionStatisticId + "/";
+            if (statisticId == null
+                || !statisticId.StartsWith(prefix, StringComparison.Ordinal)
+                || !Enum.TryParse(
+                    statisticId.Substring(prefix.Length),
+                    ignoreCase: false,
+                    out category)
+                || !Enum.IsDefined(typeof(FacilityCategory), category))
+            {
+                category = default;
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>

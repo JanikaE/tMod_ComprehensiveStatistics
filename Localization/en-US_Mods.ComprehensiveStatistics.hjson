@@ -50,13 +50,15 @@ UI: {
 		MissingItemContent: Missing content: {0}
 	}
 
-	NPCs: {
+	Interactions: {
 		DialogueGroup: NPC dialogue
-		FinalKillsGroup: Final kills
-		AssistsGroup: Assists
-		WorldDeathsGroup: World deaths
-		ConversationStarted: Conversation started
+		BuffStationsGroup: Buff stations
+		FurnitureGroup: Furniture
+		ContainersGroup: Containers
+		UtilitiesGroup: Pylons, clocks, and mechanisms
+		MissingFacilityContent: Missing facility: {0}
 		MissingNpcContent: Missing content: {0}
+		ConversationStarted: Conversation started
 
 		ChatButtons: {
 			ShopFirst: Shop (first button)
@@ -76,6 +78,13 @@ UI: {
 			TavernkeepHelpSecond: Eternia Crystal help (second button)
 			CustomSecond: Custom action (second button)
 		}
+	}
+
+	Kills: {
+		FinalKillsGroup: Final kills
+		AssistsGroup: Assists
+		WorldDeathsGroup: World deaths
+		MissingNpcContent: Missing content: {0}
 	}
 
 	Economy: {
@@ -141,12 +150,12 @@ UI: {
 
 		Interactions: {
 			Title: Interactions
-			Description: Buff station, furniture, container, pylon, clock, and mechanism interactions will appear here.
+			Description: NPC conversations and actions, plus buff station, furniture, container, pylon, clock, and mechanism interactions will appear here.
 		}
 
-		NPCs: {
-			Title: NPCs
-			Description: NPC conversations, kills, assists, and world deaths will appear here.
+		Kills: {
+			Title: Kills
+			Description: Final kills and assists by this character, plus actual NPC deaths in the current world, will appear here.
 		}
 
 		Economy: {

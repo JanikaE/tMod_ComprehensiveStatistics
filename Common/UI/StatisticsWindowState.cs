@@ -30,7 +30,8 @@ namespace ComprehensiveStatistics.Common.UI
         private const float ColumnGap = 10f;
         private const float TabGap = 4f;
         private const int ItemsTabIndex = 2;
-        private const int NpcsTabIndex = 4;
+        private const int InteractionsTabIndex = 3;
+        private const int KillsTabIndex = 4;
         private const int EconomyTabIndex = 5;
         private const int FishingTabIndex = 6;
         private const int MovementTabIndex = 7;
@@ -47,14 +48,14 @@ namespace ComprehensiveStatistics.Common.UI
             "Blocks",
             "Items",
             "Interactions",
-            "NPCs",
+            "Kills",
             "Economy",
             "Fishing",
             "Movement",
             "Survival"
         };
 
-        // 第一版只有概览和 NPC 页会展示世界公共统计；其余页面记录的都是角色行为。
+        // 第一版只有概览和击杀页会展示世界公共统计；其余页面记录的都是角色行为。
         private static readonly bool[] TabSupportsWorldPublicScope =
         {
             true,
@@ -80,7 +81,8 @@ namespace ComprehensiveStatistics.Common.UI
         private HeaderActionButton expandCollapseButton;
         private StatisticsToolbar toolbar;
         private VirtualizedStatisticsList itemList;
-        private VirtualizedStatisticsList npcList;
+        private VirtualizedStatisticsList interactionList;
+        private VirtualizedStatisticsList killList;
         private VirtualizedStatisticsList economyList;
         private VirtualizedStatisticsList fishingList;
         private VirtualizedStatisticsList movementList;
@@ -89,7 +91,8 @@ namespace ComprehensiveStatistics.Common.UI
         private int selectedTabIndex;
         private Point lastViewportSize;
         private bool isItemListAttached;
-        private bool isNpcListAttached;
+        private bool isInteractionListAttached;
+        private bool isKillListAttached;
         private bool isEconomyListAttached;
         private bool isFishingListAttached;
         private bool isMovementListAttached;
@@ -103,7 +106,8 @@ namespace ComprehensiveStatistics.Common.UI
         internal void ResetTransientViewState()
         {
             itemList?.ResetTransientState();
-            npcList?.ResetTransientState();
+            interactionList?.ResetTransientState();
+            killList?.ResetTransientState();
             economyList?.ResetTransientState();
             fishingList?.ResetTransientState();
             movementList?.ResetTransientState();
@@ -208,12 +212,19 @@ namespace ComprehensiveStatistics.Common.UI
             itemList.Width.Set(0f, 1f);
             itemList.Height.Set(-ListTop, 1f);
 
-            npcList = new VirtualizedStatisticsList(
-                CreateNpcGroups(data: null, worldPublic: false),
+            interactionList = new VirtualizedStatisticsList(
+                CreateInteractionGroups(data: null),
                 StatisticsMetricDisplay.Events);
-            npcList.Top.Set(ListTop, 0f);
-            npcList.Width.Set(0f, 1f);
-            npcList.Height.Set(-ListTop, 1f);
+            interactionList.Top.Set(ListTop, 0f);
+            interactionList.Width.Set(0f, 1f);
+            interactionList.Height.Set(-ListTop, 1f);
+
+            killList = new VirtualizedStatisticsList(
+                CreateKillGroups(data: null, worldPublic: false),
+                StatisticsMetricDisplay.Events);
+            killList.Top.Set(ListTop, 0f);
+            killList.Width.Set(0f, 1f);
+            killList.Height.Set(-ListTop, 1f);
 
             economyList = new VirtualizedStatisticsList(
                 CreateEconomyGroups(data: null),
@@ -230,7 +241,8 @@ namespace ComprehensiveStatistics.Common.UI
             fishingList.Height.Set(-ListTop, 1f);
 
             itemList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            npcList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            interactionList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            killList.ExpansionStateChanged += UpdateExpandCollapseButton;
             economyList.ExpansionStateChanged += UpdateExpandCollapseButton;
             fishingList.ExpansionStateChanged += UpdateExpandCollapseButton;
             movementList.ExpansionStateChanged += UpdateExpandCollapseButton;
@@ -306,7 +318,8 @@ namespace ComprehensiveStatistics.Common.UI
             toolbar.SetWorldPublicScopeAvailable(TabSupportsWorldPublicScope[tabIndex]);
             UpdatePageHeading();
             SetItemTotalsVisible(tabIndex == ItemsTabIndex);
-            SetNpcTotalsVisible(tabIndex == NpcsTabIndex);
+            SetInteractionTotalsVisible(tabIndex == InteractionsTabIndex);
+            SetKillTotalsVisible(tabIndex == KillsTabIndex);
             SetEconomyTotalsVisible(tabIndex == EconomyTabIndex);
             SetFishingTotalsVisible(tabIndex == FishingTabIndex);
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
@@ -433,7 +446,8 @@ namespace ComprehensiveStatistics.Common.UI
             StatisticsContentSourceFilter sourceFilter)
         {
             itemList.SetFilters(searchQuery, sourceFilter);
-            npcList.SetFilters(searchQuery, sourceFilter);
+            interactionList.SetFilters(searchQuery, sourceFilter);
+            killList.SetFilters(searchQuery, sourceFilter);
             economyList.SetFilters(searchQuery, sourceFilter);
             fishingList.SetFilters(searchQuery, sourceFilter);
             movementList.SetFilters(searchQuery, sourceFilter);
@@ -462,7 +476,8 @@ namespace ComprehensiveStatistics.Common.UI
             return selectedTabIndex switch
             {
                 ItemsTabIndex => itemList,
-                NpcsTabIndex => npcList,
+                InteractionsTabIndex => interactionList,
+                KillsTabIndex => killList,
                 EconomyTabIndex => economyList,
                 FishingTabIndex => fishingList,
                 MovementTabIndex => movementList,
@@ -561,17 +576,18 @@ namespace ComprehensiveStatistics.Common.UI
             UpdateSurvivalTotals(scope);
             UpdateMovementTotals(scope);
             UpdateItemTotals(scope);
-            UpdateNpcTotals(scope);
+            UpdateInteractionTotals(scope);
+            UpdateKillTotals(scope);
             UpdateEconomyTotals(scope);
             UpdateFishingTotals(scope);
         }
 
         /// <summary>
-        /// 从当前角色范围重新生成 NPC 对话、最终击杀与协助击杀明细。
+        /// 从当前角色范围重新生成最终击杀与协助击杀明细，或显示世界实际死亡。
         /// </summary>
-        private void UpdateNpcTotals(StatisticsViewScope scope)
+        private void UpdateKillTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != NpcsTabIndex)
+            if (selectedTabIndex != KillsTabIndex)
             {
                 return;
             }
@@ -580,7 +596,7 @@ namespace ComprehensiveStatistics.Common.UI
             {
                 StatisticsData worldData =
                     ModContent.GetInstance<StatisticsWorldSystem>().Data;
-                npcList.SetGroups(CreateNpcGroups(worldData, worldPublic: true));
+                killList.SetGroups(CreateKillGroups(worldData, worldPublic: true));
                 return;
             }
 
@@ -588,7 +604,30 @@ namespace ComprehensiveStatistics.Common.UI
             StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
                 ? statisticsPlayer.CurrentWorldSlice
                 : statisticsPlayer.Data?.Career;
-            npcList.SetGroups(CreateNpcGroups(scopeData, worldPublic: false));
+            killList.SetGroups(CreateKillGroups(scopeData, worldPublic: false));
+        }
+
+        /// <summary>
+        /// 从当前角色范围重新生成 NPC 对话与设施交互分类和明细。
+        /// </summary>
+        private void UpdateInteractionTotals(StatisticsViewScope scope)
+        {
+            if (selectedTabIndex != InteractionsTabIndex)
+            {
+                return;
+            }
+
+            if (scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                interactionList.SetGroups(CreateInteractionGroups(data: null));
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            interactionList.SetGroups(CreateInteractionGroups(scopeData));
         }
 
         /// <summary>
@@ -737,15 +776,15 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 按需挂载 NPC 统计列表，并在显示时刷新当前范围的数据。
+        /// 按需挂载交互统计列表，并在显示时刷新当前范围的数据。
         /// </summary>
-        private void SetNpcTotalsVisible(bool visible)
+        private void SetInteractionTotalsVisible(bool visible)
         {
-            if (visible == isNpcListAttached)
+            if (visible == isInteractionListAttached)
             {
                 if (visible)
                 {
-                    UpdateNpcTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                    UpdateInteractionTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
                 }
 
                 return;
@@ -753,29 +792,169 @@ namespace ComprehensiveStatistics.Common.UI
 
             if (visible)
             {
-                contentPanel.Append(npcList);
-                UpdateNpcTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                contentPanel.Append(interactionList);
+                UpdateInteractionTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
             }
             else
             {
-                npcList.Remove();
+                interactionList.Remove();
             }
 
-            isNpcListAttached = visible;
+            isInteractionListAttached = visible;
             contentPanel.Recalculate();
         }
 
         /// <summary>
-        /// 将 NPC 角色行为或世界死亡统计转换为对应范围的树形明细。
+        /// 将 NPC 对话和设施统计转换为交互页的五个一级分组。
         /// </summary>
-        private static IEnumerable<StatisticsListGroup> CreateNpcGroups(
+        private static IEnumerable<StatisticsListGroup> CreateInteractionGroups(StatisticsData data)
+        {
+            List<StatisticsListItem> buffStations = new List<StatisticsListItem>();
+            List<StatisticsListItem> furniture = new List<StatisticsListItem>();
+            List<StatisticsListItem> containers = new List<StatisticsListItem>();
+            List<StatisticsListItem> utilities = new List<StatisticsListItem>();
+
+            if (data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (pair.Value.Events <= 0L
+                        || !pair.Key.Content.HasValue
+                        || !StatisticKeys.TryParseFacilityCategory(
+                            pair.Key.StatisticId,
+                            out FacilityCategory category))
+                    {
+                        continue;
+                    }
+
+                    StatisticsListItem item = CreateFacilityStatisticsItem(
+                        pair.Key.Content.Value,
+                        pair.Key.Style,
+                        pair.Value.Events);
+                    switch (category)
+                    {
+                        case FacilityCategory.BuffStation:
+                            buffStations.Add(item);
+                            break;
+                        case FacilityCategory.Furniture:
+                            furniture.Add(item);
+                            break;
+                        case FacilityCategory.Container:
+                            containers.Add(item);
+                            break;
+                        case FacilityCategory.Pylon:
+                        case FacilityCategory.Clock:
+                        case FacilityCategory.Mechanism:
+                            utilities.Add(item);
+                            break;
+                    }
+                }
+            }
+
+            return new[]
+            {
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Interactions.DialogueGroup",
+                    Array.Empty<StatisticsListItem>(),
+                    nameIsLocalizationKey: true,
+                    childGroups: CreateNpcDialogueGroups(data),
+                    metricDisplay: StatisticsMetricDisplay.Events),
+                CreateInteractionGroup("BuffStationsGroup", buffStations),
+                CreateInteractionGroup("FurnitureGroup", furniture),
+                CreateInteractionGroup("ContainersGroup", containers),
+                CreateInteractionGroup("UtilitiesGroup", utilities)
+            };
+        }
+
+        private static StatisticsListGroup CreateInteractionGroup(
+            string localizationName,
+            IEnumerable<StatisticsListItem> items)
+        {
+            return new StatisticsListGroup(
+                $"Mods.ComprehensiveStatistics.UI.Interactions.{localizationName}",
+                items,
+                nameIsLocalizationKey: true,
+                metricDisplay: StatisticsMetricDisplay.Events);
+        }
+
+        /// <summary>
+        /// 使用注册定义解析设施名称和放置物品图标；定义缺失时仍保留存档中的稳定键。
+        /// </summary>
+        private static StatisticsListItem CreateFacilityStatisticsItem(
+            StableContentKey content,
+            string style,
+            long events)
+        {
+            bool definitionResolved = FacilityRegistry.TryGetDefinition(
+                content,
+                style,
+                out FacilityDefinition definition);
+            int itemType = definitionResolved ? definition.IconItemType : 0;
+            string name = definitionResolved
+                ? Lang.GetItemNameValue(itemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Interactions.MissingFacilityContent",
+                    $"{content}#{style}");
+            Asset<Texture2D> icon = null;
+            if (definitionResolved)
+            {
+                Main.instance.LoadItem(itemType);
+                icon = TextureAssets.Item[itemType];
+            }
+
+            StatisticsContentSource source = GetContentSource(content);
+            int? vanillaTileId = content.TryResolveTileType(out int tileType)
+                && source == StatisticsContentSource.Vanilla
+                    ? tileType
+                    : null;
+            return new StatisticsListItem(
+                name,
+                itemType,
+                icon,
+                events,
+                units: 0L,
+                source: source,
+                iconKind: definitionResolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
+                content: content,
+                vanillaContentId: vanillaTileId);
+        }
+
+        /// <summary>
+        /// 按需挂载击杀统计列表，并在显示时刷新当前范围的数据。
+        /// </summary>
+        private void SetKillTotalsVisible(bool visible)
+        {
+            if (visible == isKillListAttached)
+            {
+                if (visible)
+                {
+                    UpdateKillTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(killList);
+                UpdateKillTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                killList.Remove();
+            }
+
+            isKillListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 将角色击杀/协助或世界实际死亡转换为对应范围的树形明细。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateKillGroups(
             StatisticsData data,
             bool worldPublic)
         {
-            Dictionary<StableContentKey, long> conversationsByNpc =
-                new Dictionary<StableContentKey, long>();
-            Dictionary<StableContentKey, Dictionary<NpcChatButtonKind, long>> buttonsByNpc =
-                new Dictionary<StableContentKey, Dictionary<NpcChatButtonKind, long>>();
             Dictionary<StableContentKey, long> finalKillsByNpc =
                 new Dictionary<StableContentKey, long>();
             Dictionary<StableContentKey, long> assistsByNpc =
@@ -793,30 +972,6 @@ namespace ComprehensiveStatistics.Common.UI
 
                     StableContentKey content = pair.Key.Content.Value;
                     if (string.Equals(
-                        pair.Key.StatisticId,
-                        StatisticKeys.NpcConversationStatisticId,
-                        StringComparison.Ordinal))
-                    {
-                        conversationsByNpc.TryGetValue(content, out long current);
-                        conversationsByNpc[content] = SaturatingAdd(
-                            current,
-                            pair.Value.Events);
-                    }
-                    else if (string.Equals(
-                        pair.Key.StatisticId,
-                        StatisticKeys.NpcChatButtonStatisticId,
-                        StringComparison.Ordinal)
-                        && StatisticKeys.TryParseNpcChatButtonKind(
-                            pair.Key.Style,
-                            out NpcChatButtonKind buttonKind))
-                    {
-                        AddNpcChatButtonMetrics(
-                            buttonsByNpc,
-                            content,
-                            buttonKind,
-                            pair.Value.Events);
-                    }
-                    else if (string.Equals(
                         pair.Key.StatisticId,
                         StatisticKeys.NpcFinalKillStatisticId,
                         StringComparison.Ordinal))
@@ -848,11 +1003,72 @@ namespace ComprehensiveStatistics.Common.UI
                 return new[]
                 {
                     new StatisticsListGroup(
-                        "Mods.ComprehensiveStatistics.UI.NPCs.WorldDeathsGroup",
+                        "Mods.ComprehensiveStatistics.UI.Kills.WorldDeathsGroup",
                         CreateNpcStatisticsItems(worldDeathsByNpc),
                         nameIsLocalizationKey: true,
                         metricDisplay: StatisticsMetricDisplay.Events)
                 };
+            }
+
+            return new[]
+            {
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Kills.FinalKillsGroup",
+                    CreateNpcStatisticsItems(finalKillsByNpc),
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.Events),
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Kills.AssistsGroup",
+                    CreateNpcStatisticsItems(assistsByNpc),
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.Events)
+            };
+        }
+
+        /// <summary>
+        /// 将开始对话与对话按钮按 NPC 汇总为交互页的二级分组。
+        /// </summary>
+        private static IReadOnlyList<StatisticsListGroup> CreateNpcDialogueGroups(
+            StatisticsData data)
+        {
+            Dictionary<StableContentKey, long> conversationsByNpc =
+                new Dictionary<StableContentKey, long>();
+            Dictionary<StableContentKey, Dictionary<NpcChatButtonKind, long>> buttonsByNpc =
+                new Dictionary<StableContentKey, Dictionary<NpcChatButtonKind, long>>();
+
+            if (data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (!pair.Key.Content.HasValue || pair.Value.Events <= 0L)
+                    {
+                        continue;
+                    }
+
+                    StableContentKey content = pair.Key.Content.Value;
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.NpcConversationStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        conversationsByNpc.TryGetValue(content, out long current);
+                        conversationsByNpc[content] = SaturatingAdd(current, pair.Value.Events);
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.NpcChatButtonStatisticId,
+                        StringComparison.Ordinal)
+                        && StatisticKeys.TryParseNpcChatButtonKind(
+                            pair.Key.Style,
+                            out NpcChatButtonKind buttonKind))
+                    {
+                        AddNpcChatButtonMetrics(
+                            buttonsByNpc,
+                            content,
+                            buttonKind,
+                            pair.Value.Events);
+                    }
+                }
             }
 
             HashSet<StableContentKey> npcContents =
@@ -876,25 +1092,7 @@ namespace ComprehensiveStatistics.Common.UI
                     buttons));
             }
 
-            return new[]
-            {
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.NPCs.DialogueGroup",
-                    Array.Empty<StatisticsListItem>(),
-                    nameIsLocalizationKey: true,
-                    childGroups: npcGroups,
-                    metricDisplay: StatisticsMetricDisplay.Events),
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.NPCs.FinalKillsGroup",
-                    CreateNpcStatisticsItems(finalKillsByNpc),
-                    nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.Events),
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.NPCs.AssistsGroup",
-                    CreateNpcStatisticsItems(assistsByNpc),
-                    nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.Events)
-            };
+            return npcGroups;
         }
 
         /// <summary>
@@ -933,7 +1131,7 @@ namespace ComprehensiveStatistics.Common.UI
             string name = resolved
                 ? Lang.GetNPCNameValue(npcType)
                 : Language.GetTextValue(
-                    "Mods.ComprehensiveStatistics.UI.NPCs.MissingNpcContent",
+                    "Mods.ComprehensiveStatistics.UI.Kills.MissingNpcContent",
                     content.ToString());
             Asset<Texture2D> icon = null;
             if (resolved)
@@ -990,7 +1188,7 @@ namespace ComprehensiveStatistics.Common.UI
             string name = resolved
                 ? Lang.GetNPCNameValue(npcType)
                 : Language.GetTextValue(
-                    "Mods.ComprehensiveStatistics.UI.NPCs.MissingNpcContent",
+                    "Mods.ComprehensiveStatistics.UI.Interactions.MissingNpcContent",
                     content.ToString());
             Asset<Texture2D> icon = null;
             if (resolved)
@@ -1005,7 +1203,7 @@ namespace ComprehensiveStatistics.Common.UI
             if (conversationEvents > 0L)
             {
                 dialogueItems.Add(new StatisticsListItem(
-                    "Mods.ComprehensiveStatistics.UI.NPCs.ConversationStarted",
+                    "Mods.ComprehensiveStatistics.UI.Interactions.ConversationStarted",
                     itemType: 0,
                     icon: null,
                     events: conversationEvents,
@@ -1025,7 +1223,7 @@ namespace ComprehensiveStatistics.Common.UI
                 }
 
                 dialogueItems.Add(new StatisticsListItem(
-                    $"Mods.ComprehensiveStatistics.UI.NPCs.ChatButtons.{buttonKind}",
+                    $"Mods.ComprehensiveStatistics.UI.Interactions.ChatButtons.{buttonKind}",
                     itemType: 0,
                     icon: null,
                     events: events,

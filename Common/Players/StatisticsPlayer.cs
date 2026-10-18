@@ -1687,6 +1687,21 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 记录一次命中原版设施注册表的右键交互。I2-I4 会在调用本入口前逐类确认实际效果。
+        /// </summary>
+        internal void RecordFacilityInteraction(FacilityDefinition definition)
+        {
+            if (!IsOwnedByLocalClient || definition == null)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetFacilityInteractionKey(definition),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
         /// 从角色生涯及当前世界切片同时撤销一笔已记录的可逆交易。
         /// </summary>
         private void Unrecord(StatisticKey key, StatisticMetrics delta)
