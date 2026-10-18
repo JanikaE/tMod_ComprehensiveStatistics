@@ -775,27 +775,49 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 选择列标题；同一列依次在正序、倒序和无排序之间循环。
+        /// 选择列标题；数量列从降序开始，其余列从升序开始循环。
         /// </summary>
         private void SelectSortColumn(StatisticsListSortColumn column)
         {
             if (sortColumn != column)
             {
                 sortColumn = column;
-                sortDirection = StatisticsListSortDirection.Ascending;
+                sortDirection = GetNextSortDirection(
+                    column,
+                    StatisticsListSortDirection.None);
             }
             else
             {
-                sortDirection = sortDirection switch
-                {
-                    StatisticsListSortDirection.None => StatisticsListSortDirection.Ascending,
-                    StatisticsListSortDirection.Ascending => StatisticsListSortDirection.Descending,
-                    _ => StatisticsListSortDirection.None
-                };
+                sortDirection = GetNextSortDirection(column, sortDirection);
             }
 
             ApplySort(resetScroll: true);
             SoundEngine.PlaySound(SoundID.MenuTick);
+        }
+
+        /// <summary>
+        /// 获取列标题的下一排序状态；数量列按降序、升序、无排序循环。
+        /// </summary>
+        private static StatisticsListSortDirection GetNextSortDirection(
+            StatisticsListSortColumn column,
+            StatisticsListSortDirection current)
+        {
+            if (column == StatisticsListSortColumn.Units)
+            {
+                return current switch
+                {
+                    StatisticsListSortDirection.None => StatisticsListSortDirection.Descending,
+                    StatisticsListSortDirection.Descending => StatisticsListSortDirection.Ascending,
+                    _ => StatisticsListSortDirection.None
+                };
+            }
+
+            return current switch
+            {
+                StatisticsListSortDirection.None => StatisticsListSortDirection.Ascending,
+                StatisticsListSortDirection.Ascending => StatisticsListSortDirection.Descending,
+                _ => StatisticsListSortDirection.None
+            };
         }
 
         /// <summary>

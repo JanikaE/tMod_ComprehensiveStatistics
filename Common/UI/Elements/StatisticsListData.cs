@@ -33,6 +33,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     internal enum StatisticsMetricDisplay
     {
         UnitsAndEvents,
+        UnitsAndEventsHideEqual,
         Events,
         Amount,
         Distance,

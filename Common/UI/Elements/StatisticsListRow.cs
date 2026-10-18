@@ -638,6 +638,14 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     events);
             }
 
+            if (metricDisplay == StatisticsMetricDisplay.UnitsAndEventsHideEqual
+                && units == events)
+            {
+                return Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.List.EventsFormat",
+                    events);
+            }
+
             return Language.GetTextValue(
                 "Mods.ComprehensiveStatistics.UI.List.MetricFormat",
                 units,

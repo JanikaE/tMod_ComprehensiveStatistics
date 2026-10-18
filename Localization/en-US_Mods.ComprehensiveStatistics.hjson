@@ -91,6 +91,20 @@ UI: {
 		MissingCurrencyContent: Missing currency: {0}
 	}
 
+	Fishing: {
+		CastsGroup: Casts
+		SuccessfulCatches: Successful catches
+		EmptyReels: Reeled in without a catch
+		InterruptedCasts: Other interruptions
+		MissingItemContent: Missing content: {0}
+
+		Liquids: {
+			Water: Water
+			Honey: Honey
+			Lava: Lava
+		}
+	}
+
 	Movement: {
 		MovementModes: Total distance traveled
 		PreviouslyUnclassified: Other or unclassified

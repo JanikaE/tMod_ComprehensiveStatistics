@@ -67,6 +67,16 @@ namespace ComprehensiveStatistics.Common.Statistics
     }
 
     /// <summary>
+    /// 成功渔获所在的液体类型；枚举名称写入明细键，已有成员不可重命名。
+    /// </summary>
+    internal enum FishingLiquidKind
+    {
+        Water,
+        Honey,
+        Lava
+    }
+
+    /// <summary>
     /// 集中定义正式统计键，使采集、存档和 UI 使用同一稳定标识。
     /// </summary>
     internal static class StatisticKeys
@@ -85,6 +95,30 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string NpcFinalKillStatisticId = "npcs/final-kills";
         internal const string NpcAssistStatisticId = "npcs/assists";
         internal const string NpcWorldDeathStatisticId = "npcs/world-deaths";
+        internal const string FishingItemCatchStatisticId = "fishing/catches/items";
+        internal const string FishingNpcCatchStatisticId = "fishing/catches/npcs";
+
+        internal static readonly StatisticKey FishingSuccessfulCatches =
+            new StatisticKey("fishing/successful-catches");
+
+        internal static readonly StatisticKey FishingCasts =
+            new StatisticKey("fishing/casts");
+
+        internal static readonly StatisticKey FishingSuccessfulCasts =
+            new StatisticKey("fishing/results/successful");
+
+        internal static readonly StatisticKey FishingEmptyReels =
+            new StatisticKey("fishing/results/empty-reels");
+
+        internal static readonly StatisticKey FishingInterruptedCasts =
+            new StatisticKey("fishing/results/interrupted");
+
+        private static readonly StatisticKey[] FishingLiquidCatchKeys =
+        {
+            new StatisticKey("fishing/catches/liquid/water"),
+            new StatisticKey("fishing/catches/liquid/honey"),
+            new StatisticKey("fishing/catches/liquid/lava")
+        };
 
         internal static readonly StatisticKey NurseHealingWithDebuffsRemoved =
             new StatisticKey(NurseHealingStatisticId, style: "debuffs-removed");
@@ -290,6 +324,51 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal static StatisticKey GetNpcWorldDeathKey(StableContentKey npcContent)
         {
             return new StatisticKey(NpcWorldDeathStatisticId, npcContent);
+        }
+
+        /// <summary>
+        /// 获取指定物品及其来源液体对应的成功物品渔获统计键。
+        /// </summary>
+        internal static StatisticKey GetFishingItemCatchKey(
+            StableContentKey itemContent,
+            FishingLiquidKind liquid)
+        {
+            return new StatisticKey(
+                FishingItemCatchStatisticId,
+                itemContent,
+                liquid.ToString());
+        }
+
+        /// <summary>
+        /// 获取指定 NPC 及其来源液体对应的成功 NPC 渔获统计键。
+        /// </summary>
+        internal static StatisticKey GetFishingNpcCatchKey(
+            StableContentKey npcContent,
+            FishingLiquidKind liquid)
+        {
+            return new StatisticKey(
+                FishingNpcCatchStatisticId,
+                npcContent,
+                liquid.ToString());
+        }
+
+        /// <summary>
+        /// 获取指定液体类型对应的成功渔获统计键。
+        /// </summary>
+        internal static StatisticKey GetFishingLiquidCatchKey(FishingLiquidKind liquid)
+        {
+            return FishingLiquidCatchKeys[(int)liquid];
+        }
+
+        /// <summary>
+        /// 从渔获明细键的样式维度恢复来源液体。
+        /// </summary>
+        internal static bool TryParseFishingLiquidKind(
+            string style,
+            out FishingLiquidKind liquid)
+        {
+            return Enum.TryParse(style, ignoreCase: false, out liquid)
+                && Enum.IsDefined(typeof(FishingLiquidKind), liquid);
         }
 
         /// <summary>

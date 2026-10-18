@@ -32,6 +32,7 @@ namespace ComprehensiveStatistics.Common.UI
         private const int ItemsTabIndex = 2;
         private const int NpcsTabIndex = 4;
         private const int EconomyTabIndex = 5;
+        private const int FishingTabIndex = 6;
         private const int MovementTabIndex = 7;
         private const int SurvivalTabIndex = 8;
         private const float ToolbarTop = 38f;
@@ -81,6 +82,7 @@ namespace ComprehensiveStatistics.Common.UI
         private VirtualizedStatisticsList itemList;
         private VirtualizedStatisticsList npcList;
         private VirtualizedStatisticsList economyList;
+        private VirtualizedStatisticsList fishingList;
         private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
         private UIImageButton closeButton;
@@ -89,6 +91,7 @@ namespace ComprehensiveStatistics.Common.UI
         private bool isItemListAttached;
         private bool isNpcListAttached;
         private bool isEconomyListAttached;
+        private bool isFishingListAttached;
         private bool isMovementListAttached;
         private bool isSurvivalListAttached;
 
@@ -102,6 +105,7 @@ namespace ComprehensiveStatistics.Common.UI
             itemList?.ResetTransientState();
             npcList?.ResetTransientState();
             economyList?.ResetTransientState();
+            fishingList?.ResetTransientState();
             movementList?.ResetTransientState();
             survivalList?.ResetTransientState();
         }
@@ -218,9 +222,17 @@ namespace ComprehensiveStatistics.Common.UI
             economyList.Width.Set(0f, 1f);
             economyList.Height.Set(-ListTop, 1f);
 
+            fishingList = new VirtualizedStatisticsList(
+                CreateFishingGroups(data: null),
+                StatisticsMetricDisplay.UnitsAndEvents);
+            fishingList.Top.Set(ListTop, 0f);
+            fishingList.Width.Set(0f, 1f);
+            fishingList.Height.Set(-ListTop, 1f);
+
             itemList.ExpansionStateChanged += UpdateExpandCollapseButton;
             npcList.ExpansionStateChanged += UpdateExpandCollapseButton;
             economyList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            fishingList.ExpansionStateChanged += UpdateExpandCollapseButton;
             movementList.ExpansionStateChanged += UpdateExpandCollapseButton;
             survivalList.ExpansionStateChanged += UpdateExpandCollapseButton;
 
@@ -296,6 +308,7 @@ namespace ComprehensiveStatistics.Common.UI
             SetItemTotalsVisible(tabIndex == ItemsTabIndex);
             SetNpcTotalsVisible(tabIndex == NpcsTabIndex);
             SetEconomyTotalsVisible(tabIndex == EconomyTabIndex);
+            SetFishingTotalsVisible(tabIndex == FishingTabIndex);
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
             UpdateExpandCollapseButton();
@@ -422,6 +435,7 @@ namespace ComprehensiveStatistics.Common.UI
             itemList.SetFilters(searchQuery, sourceFilter);
             npcList.SetFilters(searchQuery, sourceFilter);
             economyList.SetFilters(searchQuery, sourceFilter);
+            fishingList.SetFilters(searchQuery, sourceFilter);
             movementList.SetFilters(searchQuery, sourceFilter);
             survivalList.SetFilters(searchQuery, sourceFilter);
         }
@@ -450,6 +464,7 @@ namespace ComprehensiveStatistics.Common.UI
                 ItemsTabIndex => itemList,
                 NpcsTabIndex => npcList,
                 EconomyTabIndex => economyList,
+                FishingTabIndex => fishingList,
                 MovementTabIndex => movementList,
                 SurvivalTabIndex => survivalList,
                 _ => null
@@ -548,6 +563,7 @@ namespace ComprehensiveStatistics.Common.UI
             UpdateItemTotals(scope);
             UpdateNpcTotals(scope);
             UpdateEconomyTotals(scope);
+            UpdateFishingTotals(scope);
         }
 
         /// <summary>
@@ -619,6 +635,29 @@ namespace ComprehensiveStatistics.Common.UI
                 ? statisticsPlayer.CurrentWorldSlice
                 : statisticsPlayer.Data?.Career;
             economyList.SetGroups(CreateEconomyGroups(scopeData));
+        }
+
+        /// <summary>
+        /// 从当前角色范围重新生成抛竿结果、渔获内容与液体类型明细。
+        /// </summary>
+        private void UpdateFishingTotals(StatisticsViewScope scope)
+        {
+            if (selectedTabIndex != FishingTabIndex)
+            {
+                return;
+            }
+
+            if (scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                fishingList.SetGroups(CreateFishingGroups(data: null));
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            fishingList.SetGroups(CreateFishingGroups(scopeData));
         }
 
         /// <summary>
@@ -862,7 +901,8 @@ namespace ComprehensiveStatistics.Common.UI
         /// 将按 NPC 汇总的事件字典转换为默认内容顺序的统计叶子项。
         /// </summary>
         private static List<StatisticsListItem> CreateNpcStatisticsItems(
-            IReadOnlyDictionary<StableContentKey, long> eventsByNpc)
+            IReadOnlyDictionary<StableContentKey, long> eventsByNpc,
+            bool mirrorEventsToUnits = false)
         {
             List<StableContentKey> orderedContents =
                 new List<StableContentKey>(eventsByNpc.Keys);
@@ -871,7 +911,10 @@ namespace ComprehensiveStatistics.Common.UI
                 new List<StatisticsListItem>(orderedContents.Count);
             foreach (StableContentKey content in orderedContents)
             {
-                items.Add(CreateNpcStatisticsItem(content, eventsByNpc[content]));
+                items.Add(CreateNpcStatisticsItem(
+                    content,
+                    eventsByNpc[content],
+                    mirrorEventsToUnits));
             }
 
             return items;
@@ -882,7 +925,8 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private static StatisticsListItem CreateNpcStatisticsItem(
             StableContentKey content,
-            long events)
+            long events,
+            bool mirrorEventsToUnits = false)
         {
             bool resolved = content.TryResolveNpcType(out int npcType);
             StatisticsContentSource source = GetContentSource(content);
@@ -903,7 +947,7 @@ namespace ComprehensiveStatistics.Common.UI
                 itemType: resolved ? npcType : 0,
                 icon: icon,
                 events: events,
-                units: 0L,
+                units: mirrorEventsToUnits ? events : 0L,
                 source: source,
                 iconKind: resolved ? StatisticsIconKind.Npc : StatisticsIconKind.None,
                 content: content,
@@ -1618,6 +1662,206 @@ namespace ComprehensiveStatistics.Common.UI
                 events: useEvents,
                 units: pickupUnits,
                 amount: discardUnits,
+                source: source,
+                iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? itemType
+                    : null);
+        }
+
+        /// <summary>
+        /// 按需挂载钓鱼统计列表，并在显示时刷新当前范围的数据。
+        /// </summary>
+        private void SetFishingTotalsVisible(bool visible)
+        {
+            if (visible == isFishingListAttached)
+            {
+                if (visible)
+                {
+                    UpdateFishingTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(fishingList);
+                UpdateFishingTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                fishingList.Remove();
+            }
+
+            isFishingListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 从一个统计范围创建抛竿次数与统一渔获树。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateFishingGroups(StatisticsData data)
+        {
+            long successfulCasts = data?
+                .GetValue(StatisticKeys.FishingSuccessfulCasts).Events ?? 0L;
+            long emptyReels = data?
+                .GetValue(StatisticKeys.FishingEmptyReels).Events ?? 0L;
+            long interruptedCasts = data?
+                .GetValue(StatisticKeys.FishingInterruptedCasts).Events ?? 0L;
+            List<StatisticsListGroup> groups = new List<StatisticsListGroup>
+            {
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Fishing.CastsGroup",
+                    new[]
+                    {
+                        new StatisticsListItem(
+                            "Mods.ComprehensiveStatistics.UI.Fishing.SuccessfulCatches",
+                            itemType: 0,
+                            icon: null,
+                            events: successfulCasts,
+                            units: 0L,
+                            source: StatisticsContentSource.Neutral,
+                            nameIsLocalizationKey: true,
+                            iconKind: StatisticsIconKind.None),
+                        new StatisticsListItem(
+                            "Mods.ComprehensiveStatistics.UI.Fishing.EmptyReels",
+                            itemType: 0,
+                            icon: null,
+                            events: emptyReels,
+                            units: 0L,
+                            source: StatisticsContentSource.Neutral,
+                            nameIsLocalizationKey: true,
+                            iconKind: StatisticsIconKind.None),
+                        new StatisticsListItem(
+                            "Mods.ComprehensiveStatistics.UI.Fishing.InterruptedCasts",
+                            itemType: 0,
+                            icon: null,
+                            events: interruptedCasts,
+                            units: 0L,
+                            source: StatisticsContentSource.Neutral,
+                            nameIsLocalizationKey: true,
+                            iconKind: StatisticsIconKind.None)
+                    },
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.Events)
+            };
+
+            foreach (FishingLiquidKind liquid in Enum.GetValues(typeof(FishingLiquidKind)))
+            {
+                int iconItemType = GetFishingLiquidIconItemType(liquid);
+                Main.instance.LoadItem(iconItemType);
+                groups.Add(new StatisticsListGroup(
+                    $"Mods.ComprehensiveStatistics.UI.Fishing.Liquids.{liquid}",
+                    CreateFishingCatchItems(data, liquid),
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.UnitsAndEventsHideEqual,
+                    iconType: iconItemType,
+                    icon: TextureAssets.Item[iconItemType],
+                    iconKind: StatisticsIconKind.Item));
+            }
+
+            return groups;
+        }
+
+        /// <summary>
+        /// 创建一个来源液体下合并显示的物品与 NPC 渔获列表。
+        /// </summary>
+        private static List<StatisticsListItem> CreateFishingCatchItems(
+            StatisticsData data,
+            FishingLiquidKind liquid)
+        {
+            Dictionary<StableContentKey, StatisticMetrics> itemCatches =
+                new Dictionary<StableContentKey, StatisticMetrics>();
+            Dictionary<StableContentKey, long> npcCatches =
+                new Dictionary<StableContentKey, long>();
+
+            if (data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (!pair.Key.Content.HasValue
+                        || !StatisticKeys.TryParseFishingLiquidKind(
+                            pair.Key.Style,
+                            out FishingLiquidKind sourceLiquid)
+                        || sourceLiquid != liquid)
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.FishingItemCatchStatisticId,
+                        StringComparison.Ordinal)
+                        && (pair.Value.Events > 0L || pair.Value.Units > 0L))
+                    {
+                        itemCatches[pair.Key.Content.Value] = pair.Value;
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.FishingNpcCatchStatisticId,
+                        StringComparison.Ordinal)
+                        && pair.Value.Events > 0L)
+                    {
+                        npcCatches[pair.Key.Content.Value] = pair.Value.Events;
+                    }
+                }
+            }
+
+            List<StatisticsListItem> catches =
+                new List<StatisticsListItem>(itemCatches.Count + npcCatches.Count);
+            foreach (KeyValuePair<StableContentKey, StatisticMetrics> pair in itemCatches)
+            {
+                catches.Add(CreateFishingItemCatchItem(pair.Key, pair.Value));
+            }
+
+            catches.AddRange(CreateNpcStatisticsItems(
+                npcCatches,
+                mirrorEventsToUnits: true));
+            return catches;
+        }
+
+        /// <summary>
+        /// 获取液体分类行使用的原版无底桶图标。
+        /// </summary>
+        private static int GetFishingLiquidIconItemType(FishingLiquidKind liquid)
+        {
+            return liquid switch
+            {
+                FishingLiquidKind.Honey => ItemID.BottomlessHoneyBucket,
+                FishingLiquidKind.Lava => ItemID.BottomlessLavaBucket,
+                _ => ItemID.BottomlessBucket
+            };
+        }
+
+        /// <summary>
+        /// 将物品渔获稳定键转换为带图标、事件数和实际数量的列表项。
+        /// </summary>
+        private static StatisticsListItem CreateFishingItemCatchItem(
+            StableContentKey content,
+            StatisticMetrics metrics)
+        {
+            bool resolved = content.TryResolveItemType(out int itemType);
+            StatisticsContentSource source = GetContentSource(content);
+            string name = resolved
+                ? Lang.GetItemNameValue(itemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Fishing.MissingItemContent",
+                    content.ToString());
+            Asset<Texture2D> icon = null;
+            if (resolved)
+            {
+                Main.instance.LoadItem(itemType);
+                icon = TextureAssets.Item[itemType];
+            }
+
+            return new StatisticsListItem(
+                name,
+                itemType: resolved ? itemType : 0,
+                icon: icon,
+                events: metrics.Events,
+                units: metrics.Units,
                 source: source,
                 iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
                 content: content,

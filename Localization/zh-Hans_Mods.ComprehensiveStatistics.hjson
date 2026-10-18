@@ -91,6 +91,20 @@ UI: {
 		MissingCurrencyContent: 缺失货币：{0}
 	}
 
+	Fishing: {
+		CastsGroup: 抛竿次数
+		SuccessfulCatches: 成功上钩
+		EmptyReels: 主动收杆（未上钩）
+		InterruptedCasts: 其他中断
+		MissingItemContent: 缺失内容：{0}
+
+		Liquids: {
+			Water: 水
+			Honey: 蜂蜜
+			Lava: 熔岩
+		}
+	}
+
 	Movement: {
 		MovementModes: 总移动距离
 		PreviouslyUnclassified: 其他或未分类

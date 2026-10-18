@@ -59,7 +59,18 @@ namespace ComprehensiveStatistics.Common.Players
             new List<ReversibleSaleLot>();
         private readonly List<PendingPickupObservation> pendingPickupObservations =
             new List<PendingPickupObservation>();
+        private readonly HashSet<int> trackedFishingBobberIndices =
+            new HashSet<int>();
+        private readonly List<int> staleFishingBobberIndices =
+            new List<int>();
         private int trackedTalkingNpcIndex;
+        private bool hasPendingCaughtItem;
+        private FishingLiquidKind pendingCaughtItemLiquid;
+        private bool isFishingCastAwaitingBobber;
+        private bool hasActiveFishingCast;
+        private ulong activeFishingCastSpawnUpdate;
+        private bool activeFishingCastSucceeded;
+        private bool activeFishingCastWasReeled;
 
         internal CharacterStatisticsData Data { get; private set; }
 
@@ -83,6 +94,7 @@ namespace ComprehensiveStatistics.Common.Players
             reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
             trackedTalkingNpcIndex = -1;
+            ResetFishingTracking();
         }
 
         public override void OnEnterWorld()
@@ -98,6 +110,7 @@ namespace ComprehensiveStatistics.Common.Players
             reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
             trackedTalkingNpcIndex = -1;
+            ResetFishingTracking();
 
             // B2 临时验收计数只由所属客户端写入，进入世界一次即同时增长两个角色范围。
             if (IsOwnedByLocalClient)
@@ -141,6 +154,159 @@ namespace ComprehensiveStatistics.Common.Players
             reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
             trackedTalkingNpcIndex = -1;
+            ReconcileHistoricalFishingResults(Data);
+            ResetFishingTracking();
+        }
+
+        public override void CatchFish(
+            FishingAttempt attempt,
+            ref int itemDrop,
+            ref int npcSpawn,
+            ref AdvancedPopupRequest sonar,
+            ref Vector2 sonarPosition)
+        {
+            hasPendingCaughtItem = false;
+            pendingCaughtItemLiquid = default;
+            if (!IsOwnedByLocalClient)
+            {
+                return;
+            }
+
+            // CatchFish 只在本地客户端成功决定渔获时调用。物品优先于 NPC，与原版
+            // “存在物品时不生成 NPC”的结果选择一致；物品明细延后到 ModifyCaughtFish，
+            // 以最终物品类型和实际堆叠数量为准。
+            bool caughtItem = itemDrop > ItemID.None;
+            bool caughtNpc = !caughtItem && npcSpawn > NPCID.None;
+            if (!caughtItem && !caughtNpc)
+            {
+                return;
+            }
+
+            if (hasActiveFishingCast)
+            {
+                // CatchFish 表示至少一个浮标已经得到有效渔获；多浮标鱼竿仍只把整次
+                // 抛竿会话标为成功，其他浮标随后销毁时不得再提交失败结果。
+                activeFishingCastSucceeded = true;
+            }
+
+            FishingLiquidKind liquid = GetFishingLiquid(attempt);
+            Record(
+                StatisticKeys.FishingSuccessfulCatches,
+                new StatisticMetrics(events: 1L));
+            Record(
+                StatisticKeys.GetFishingLiquidCatchKey(liquid),
+                new StatisticMetrics(events: 1L));
+
+            if (caughtItem)
+            {
+                pendingCaughtItemLiquid = liquid;
+                hasPendingCaughtItem = true;
+                return;
+            }
+
+            if (StableContentKey.TryCreateForNpcType(
+                npcSpawn,
+                out StableContentKey npcContent))
+            {
+                Record(
+                    StatisticKeys.GetFishingNpcCatchKey(npcContent, liquid),
+                    new StatisticMetrics(events: 1L));
+            }
+        }
+
+        public override void ModifyCaughtFish(Item fish)
+        {
+            if (!hasPendingCaughtItem)
+            {
+                return;
+            }
+
+            // 先消费挂起标记，保证异常模组重复调用后续逻辑时不会重复提交同一渔获。
+            FishingLiquidKind liquid = pendingCaughtItemLiquid;
+            hasPendingCaughtItem = false;
+            pendingCaughtItemLiquid = default;
+            if (!IsOwnedByLocalClient
+                || fish == null
+                || fish.IsAir
+                || fish.stack <= 0
+                || !StableContentKey.TryCreateForItem(
+                    fish.type,
+                    out StableContentKey itemContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetFishingItemCatchKey(itemContent, liquid),
+                new StatisticMetrics(events: 1L, units: fish.stack));
+        }
+
+        /// <summary>
+        /// 将鱼竿使用周期内实际生成的浮标登记到同一次有效抛竿会话。
+        /// </summary>
+        internal void ObserveFishingBobberSpawn(Projectile bobber, Item fishingRod)
+        {
+            if (!IsOwnedByLocalClient
+                || bobber == null
+                || bobber.owner != Player.whoAmI
+                || !bobber.bobber
+                || fishingRod == null
+                || fishingRod.IsAir
+                || fishingRod.fishingPole <= 0)
+            {
+                return;
+            }
+
+            ulong currentUpdate = Main.GameUpdateCount;
+            if (isFishingCastAwaitingBobber)
+            {
+                // 正常情况下旧会话已在新鱼竿使用前结束；若第三方模组绕过销毁回调，
+                // 新的真实浮标是旧会话已中断的确定边界，先补记旧结果再开始新会话。
+                FinalizeActiveFishingCast();
+                isFishingCastAwaitingBobber = false;
+                hasActiveFishingCast = true;
+                activeFishingCastSpawnUpdate = currentUpdate;
+                activeFishingCastSucceeded = false;
+                activeFishingCastWasReeled = false;
+                trackedFishingBobberIndices.Clear();
+                trackedFishingBobberIndices.Add(bobber.whoAmI);
+                Record(StatisticKeys.FishingCasts, new StatisticMetrics(events: 1L));
+                return;
+            }
+
+            // 多浮标鱼竿会在同一 Shoot 调用链中连续生成浮标。它们共享一次抛竿结果，
+            // 因此只登记实体而不再次增加抛竿次数。
+            if (hasActiveFishingCast && activeFishingCastSpawnUpdate == currentUpdate)
+            {
+                trackedFishingBobberIndices.Add(bobber.whoAmI);
+            }
+        }
+
+        /// <summary>
+        /// 在已登记浮标销毁前记录其回收状态，并在最后一个浮标结束时提交会话结果。
+        /// </summary>
+        internal void ObserveFishingBobberEnding(Projectile bobber)
+        {
+            if (!IsOwnedByLocalClient
+                || !hasActiveFishingCast
+                || bobber == null
+                || bobber.owner != Player.whoAmI
+                || !trackedFishingBobberIndices.Remove(bobber.whoAmI))
+            {
+                return;
+            }
+
+            // 原版主动收杆会先把 ai[0] 设为正数，再让浮标飞回玩家并销毁；未进入
+            // 该状态就消失的浮标来自死亡、换物品、受控或第三方逻辑等其他中断。
+            if (bobber.ai[0] > 0f)
+            {
+                activeFishingCastWasReeled = true;
+            }
+
+            if (trackedFishingBobberIndices.Count == 0)
+            {
+                FinalizeActiveFishingCast();
+            }
         }
 
         public override void Kill(
@@ -156,6 +322,7 @@ namespace ComprehensiveStatistics.Common.Players
                 return;
             }
 
+            FinalizeActiveFishingCast();
             // 持续生命流失致死后不一定还有完整的 PostUpdate，因此先结算最后一段生命。
             ReconcileLifeLoss();
             if (hasRecordedCurrentDeath)
@@ -225,6 +392,7 @@ namespace ComprehensiveStatistics.Common.Players
                 ReconcileItemPickups();
                 ReconcileLifeLoss();
                 TrackMovementDistance();
+                ReconcileFishingBobbers();
                 UpdateItemUseTracking();
                 TrackNpcConversation();
             }
@@ -787,6 +955,9 @@ namespace ComprehensiveStatistics.Common.Players
                 ResetItemUseTracking();
             }
 
+            // 抛竿不在这里直接累计；只开启一个持续到本帧结束的观察窗口，实际生成
+            // 第一个浮标后才由 GlobalProjectile 提交，因而失败使用不会污染抛竿次数。
+            isFishingCastAwaitingBobber = item.fishingPole > 0;
             RecordItemUse(item);
         }
 
@@ -816,6 +987,141 @@ namespace ComprehensiveStatistics.Common.Players
             ClearPendingSale();
             reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
+            ResetFishingTracking();
+        }
+
+        /// <summary>
+        /// 移除未经过正常销毁回调但已经失活的浮标，并在会话耗尽时结算结果。
+        /// </summary>
+        private void ReconcileFishingBobbers()
+        {
+            if (!hasActiveFishingCast)
+            {
+                return;
+            }
+
+            staleFishingBobberIndices.Clear();
+            foreach (int projectileIndex in trackedFishingBobberIndices)
+            {
+                Projectile projectile = projectileIndex >= 0
+                    && projectileIndex < Main.projectile.Length
+                        ? Main.projectile[projectileIndex]
+                        : null;
+                bool stillTracked = projectile?.active == true
+                    && projectile.whoAmI == projectileIndex
+                    && projectile.owner == Player.whoAmI
+                    && projectile.bobber;
+                if (stillTracked)
+                {
+                    continue;
+                }
+
+                // 部分模组可能直接清除 active 而不调用 Kill；槽位尚未复用时仍可从
+                // 保留的 ai 状态判断玩家是否已经主动收杆。
+                if (projectile != null
+                    && projectile.whoAmI == projectileIndex
+                    && projectile.owner == Player.whoAmI
+                    && projectile.bobber
+                    && projectile.ai[0] > 0f)
+                {
+                    activeFishingCastWasReeled = true;
+                }
+
+                staleFishingBobberIndices.Add(projectileIndex);
+            }
+
+            foreach (int projectileIndex in staleFishingBobberIndices)
+            {
+                trackedFishingBobberIndices.Remove(projectileIndex);
+            }
+
+            if (trackedFishingBobberIndices.Count == 0)
+            {
+                FinalizeActiveFishingCast();
+            }
+        }
+
+        /// <summary>
+        /// 按成功、主动空竿或其他中断三种互斥结果结束当前抛竿会话。
+        /// </summary>
+        private void FinalizeActiveFishingCast()
+        {
+            if (!hasActiveFishingCast)
+            {
+                return;
+            }
+
+            StatisticKey resultKey = activeFishingCastSucceeded
+                ? StatisticKeys.FishingSuccessfulCasts
+                : activeFishingCastWasReeled
+                    ? StatisticKeys.FishingEmptyReels
+                    : StatisticKeys.FishingInterruptedCasts;
+            Record(resultKey, new StatisticMetrics(events: 1L));
+
+            hasActiveFishingCast = false;
+            activeFishingCastSpawnUpdate = 0UL;
+            activeFishingCastSucceeded = false;
+            activeFishingCastWasReeled = false;
+            trackedFishingBobberIndices.Clear();
+            staleFishingBobberIndices.Clear();
+        }
+
+        /// <summary>
+        /// 清除跨帧钓鱼临时状态；存档中的累计结果不受影响。
+        /// </summary>
+        private void ResetFishingTracking()
+        {
+            hasPendingCaughtItem = false;
+            pendingCaughtItemLiquid = default;
+            isFishingCastAwaitingBobber = false;
+            hasActiveFishingCast = false;
+            activeFishingCastSpawnUpdate = 0UL;
+            activeFishingCastSucceeded = false;
+            activeFishingCastWasReeled = false;
+            trackedFishingBobberIndices.Clear();
+            staleFishingBobberIndices.Clear();
+        }
+
+        /// <summary>
+        /// 将 H2 时期已有但尚无结果分类的历史抛竿保留为其他中断。
+        /// </summary>
+        private static void ReconcileHistoricalFishingResults(CharacterStatisticsData data)
+        {
+            if (data == null)
+            {
+                return;
+            }
+
+            ReconcileHistoricalFishingResults(data.Career);
+            foreach (StatisticsData worldSlice in data.WorldSlices.Values)
+            {
+                ReconcileHistoricalFishingResults(worldSlice);
+            }
+        }
+
+        /// <summary>
+        /// 在单个统计范围中补齐抛竿数与已有结果数之间不可回溯的差额。
+        /// </summary>
+        private static void ReconcileHistoricalFishingResults(StatisticsData data)
+        {
+            long casts = Math.Max(
+                data.GetValue(StatisticKeys.FishingCasts).Events,
+                0L);
+            long classifiedResults = Math.Max(
+                data.GetValue(StatisticKeys.FishingSuccessfulCasts).Events,
+                0L);
+            classifiedResults = SaturatingAdd(
+                classifiedResults,
+                Math.Max(data.GetValue(StatisticKeys.FishingEmptyReels).Events, 0L));
+            classifiedResults = SaturatingAdd(
+                classifiedResults,
+                Math.Max(data.GetValue(StatisticKeys.FishingInterruptedCasts).Events, 0L));
+            if (casts > classifiedResults)
+            {
+                data.Add(
+                    StatisticKeys.FishingInterruptedCasts,
+                    new StatisticMetrics(events: casts - classifiedResults));
+            }
         }
 
         /// <summary>
@@ -823,6 +1129,9 @@ namespace ComprehensiveStatistics.Common.Players
         /// </summary>
         private void UpdateItemUseTracking()
         {
+            // 标准鱼竿会在开始使用的同一玩家更新周期内生成浮标；帧末仍未消费的
+            // 观察窗口代表被阻止或未成功生成浮标的使用，不能泄漏到后续生成事件。
+            isFishingCastAwaitingBobber = false;
             if (!Player.channel)
             {
                 ResetItemUseTracking();
@@ -1347,6 +1656,23 @@ namespace ComprehensiveStatistics.Common.Players
             }
 
             return 0;
+        }
+
+        /// <summary>
+        /// 将钓鱼尝试中的原版液体标记归一为互斥的统计类别。
+        /// </summary>
+        private static FishingLiquidKind GetFishingLiquid(FishingAttempt attempt)
+        {
+            // 原版字段正常情况下互斥；若模组同时设置多个标记，熔岩的特殊条件优先，
+            // 其次为蜂蜜，最后将没有特殊标记的常规渔获归为水。
+            if (attempt.inLava)
+            {
+                return FishingLiquidKind.Lava;
+            }
+
+            return attempt.inHoney
+                ? FishingLiquidKind.Honey
+                : FishingLiquidKind.Water;
         }
 
         /// <summary>
