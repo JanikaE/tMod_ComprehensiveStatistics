@@ -7,11 +7,14 @@ using Terraria.ModLoader.IO;
 namespace ComprehensiveStatistics.Common.Statistics
 {
     /// <summary>
-    /// 将角色统计转换为版本化 TagCompound；只写入非零条目，并在加载时隔离损坏条目。
+    /// 将角色与世界统计转换为版本化数据；只写入非零条目，并隔离损坏条目。
     /// </summary>
     internal static class StatisticsDataSerializer
     {
         internal const string PlayerTagKey = "CharacterStatistics";
+        internal const string WorldTagKey = "WorldStatistics";
+
+        private const int MaximumNetworkEntryCount = 1_000_000;
 
         private const string FormatVersionKey = "FormatVersion";
         private const string StartedAtKey = "StartedAtUnixMilliseconds";
@@ -55,6 +58,162 @@ namespace ComprehensiveStatistics.Common.Statistics
                 [CareerKey] = SerializeScope(data.Career),
                 [WorldSlicesKey] = worldTags
             };
+        }
+
+        /// <summary>
+        /// 将当前世界公共统计序列化为世界存档标签。
+        /// </summary>
+        internal static TagCompound SerializeWorld(StatisticsData data)
+        {
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            return SerializeScope(data);
+        }
+
+        /// <summary>
+        /// 尝试从世界标签恢复受支持版本的公共统计。
+        /// </summary>
+        internal static bool TryDeserializeWorld(
+            TagCompound worldTag,
+            out StatisticsData data,
+            out string error)
+        {
+            data = null;
+            error = null;
+            if (worldTag == null || !worldTag.ContainsKey(WorldTagKey))
+            {
+                return false;
+            }
+
+            try
+            {
+                if (TryDeserializeScope(worldTag.GetCompound(WorldTagKey), out data))
+                {
+                    return true;
+                }
+
+                error = "The world statistics scope is invalid or uses an unsupported format.";
+                return false;
+            }
+            catch (Exception exception) when (IsRecoverableDataError(exception))
+            {
+                error = $"Failed to read world statistics data: {exception.Message}";
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 将一个完整统计范围写入服务器世界数据同步流。
+        /// </summary>
+        internal static void WriteScope(BinaryWriter writer, StatisticsData data)
+        {
+            if (writer == null)
+            {
+                throw new ArgumentNullException(nameof(writer));
+            }
+
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+
+            List<KeyValuePair<StatisticKey, StatisticMetrics>> entries = data.Entries
+                .Where(pair => !pair.Value.IsZero)
+                .OrderBy(pair => pair.Key.StatisticId, StringComparer.Ordinal)
+                .ThenBy(pair => pair.Key.Content?.ModName ?? string.Empty, StringComparer.Ordinal)
+                .ThenBy(pair => pair.Key.Content?.ContentName ?? string.Empty, StringComparer.Ordinal)
+                .ThenBy(pair => pair.Key.Style, StringComparer.Ordinal)
+                .ToList();
+            writer.Write(data.FormatVersion);
+            writer.Write(data.StartedAtUtc.ToUnixTimeMilliseconds());
+            writer.Write(entries.Count);
+            foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in entries)
+            {
+                writer.Write(pair.Key.StatisticId);
+                writer.Write(pair.Key.Content.HasValue);
+                if (pair.Key.Content.HasValue)
+                {
+                    writer.Write(pair.Key.Content.Value.ModName);
+                    writer.Write(pair.Key.Content.Value.ContentName);
+                }
+
+                writer.Write(pair.Key.Style);
+                writer.Write(pair.Value.Events);
+                writer.Write(pair.Value.Units);
+                writer.Write(pair.Value.Amount);
+            }
+        }
+
+        /// <summary>
+        /// 尝试从服务器世界数据同步流恢复一个完整统计范围。
+        /// </summary>
+        internal static bool TryReadScope(
+            BinaryReader reader,
+            out StatisticsData data,
+            out string error)
+        {
+            data = null;
+            error = null;
+            if (reader == null)
+            {
+                error = "The statistics network reader is unavailable.";
+                return false;
+            }
+
+            try
+            {
+                int formatVersion = reader.ReadInt32();
+                if (formatVersion != StatisticsDataFormat.CurrentVersion)
+                {
+                    error = $"Unsupported statistics network format version: {formatVersion}.";
+                    return false;
+                }
+
+                DateTimeOffset startedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(
+                    reader.ReadInt64());
+                int entryCount = reader.ReadInt32();
+                if (entryCount < 0 || entryCount > MaximumNetworkEntryCount)
+                {
+                    error = $"Invalid statistics network entry count: {entryCount}.";
+                    return false;
+                }
+
+                StatisticsData loadedData = new StatisticsData(formatVersion, startedAtUtc);
+                for (int index = 0; index < entryCount; index++)
+                {
+                    string statisticId = reader.ReadString();
+                    StableContentKey? content = null;
+                    if (reader.ReadBoolean())
+                    {
+                        content = new StableContentKey(
+                            reader.ReadString(),
+                            reader.ReadString());
+                    }
+
+                    string style = reader.ReadString();
+                    StatisticMetrics metrics = new StatisticMetrics(
+                        reader.ReadInt64(),
+                        reader.ReadInt64(),
+                        reader.ReadInt64());
+                    if (!metrics.IsZero)
+                    {
+                        loadedData.Add(new StatisticKey(statisticId, content, style), metrics);
+                    }
+                }
+
+                data = loadedData;
+                return true;
+            }
+            catch (Exception exception) when (IsRecoverableDataError(exception)
+                || exception is EndOfStreamException
+                || exception is OverflowException)
+            {
+                error = $"Failed to read synchronized statistics data: {exception.Message}";
+                return false;
+            }
         }
 
         /// <summary>

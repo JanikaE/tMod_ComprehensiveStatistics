@@ -44,7 +44,28 @@ namespace ComprehensiveStatistics.Common.Statistics
                 return true;
             }
 
-            if (npc != null && NPCID.Search.TryGetName(npc.type, out string contentName))
+            if (npc != null)
+            {
+                return TryCreateForNpcType(npc.type, out key);
+            }
+
+            key = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试从 NPC 类型创建稳定内容键，供已归一化但没有可用实例的主体使用。
+        /// </summary>
+        internal static bool TryCreateForNpcType(int npcType, out StableContentKey key)
+        {
+            ModNPC modNpc = NPCLoader.GetNPC(npcType);
+            if (modNpc != null)
+            {
+                key = new StableContentKey(modNpc.Mod.Name, modNpc.Name);
+                return true;
+            }
+
+            if (NPCID.Search.TryGetName(npcType, out string contentName))
             {
                 key = new StableContentKey("Terraria", contentName);
                 return true;

@@ -104,6 +104,17 @@ namespace ComprehensiveStatistics.Common.Systems
             }
         }
 
+        /// <summary>
+        /// 在窗口正查看世界公共范围时刷新服务器同步的数据。
+        /// </summary>
+        internal void RefreshWorldPublicData()
+        {
+            if (IsOpen)
+            {
+                statisticsWindowState.RefreshWorldPublicData();
+            }
+        }
+
         public override void UpdateUI(GameTime gameTime)
         {
             if (IsOpen)

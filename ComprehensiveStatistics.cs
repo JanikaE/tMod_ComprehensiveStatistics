@@ -1,3 +1,5 @@
+using System.IO;
+using ComprehensiveStatistics.Common.Networking;
 using Terraria;
 using Terraria.ModLoader;
 
@@ -22,6 +24,11 @@ namespace ComprehensiveStatistics
         public override void Unload()
         {
             ToggleStatisticsKeybind = null;
+        }
+
+        public override void HandlePacket(BinaryReader reader, int whoAmI)
+        {
+            StatisticsNetcode.HandlePacket(reader, whoAmI);
         }
     }
 }

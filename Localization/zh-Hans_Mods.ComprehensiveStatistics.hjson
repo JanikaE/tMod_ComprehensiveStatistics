@@ -50,6 +50,34 @@ UI: {
 		MissingItemContent: 缺失内容：{0}
 	}
 
+	NPCs: {
+		DialogueGroup: NPC 对话
+		FinalKillsGroup: 最终击杀
+		AssistsGroup: 协助击杀
+		WorldDeathsGroup: 世界实际死亡
+		ConversationStarted: 开始对话
+		MissingNpcContent: 缺失内容：{0}
+
+		ChatButtons: {
+			ShopFirst: 商店（第一按钮）
+			QuestFirst: 任务（第一按钮）
+			HelpFirst: 帮助（第一按钮）
+			HealingFirst: 治疗（第一按钮）
+			TaxCollectionFirst: 收集税款（第一按钮）
+			CurseFirst: 诅咒（第一按钮）
+			CustomFirst: 自定义功能（第一按钮）
+			ShopSecond: 商店（第二按钮）
+			WorldStatusOrPurifySecond: 世界状态或净化（第二按钮）
+			CraftingSecond: 制作（第二按钮）
+			ReforgeSecond: 重铸（第二按钮）
+			HairStyleSecond: 发型（第二按钮）
+			DyeTradeSecond: 奇异植物兑换（第二按钮）
+			MusicSecond: 音乐切换（第二按钮）
+			TavernkeepHelpSecond: 永恒水晶帮助（第二按钮）
+			CustomSecond: 自定义功能（第二按钮）
+		}
+	}
+
 	Economy: {
 		PurchasesGroup: 买入合计
 		SalesGroup: 卖出合计

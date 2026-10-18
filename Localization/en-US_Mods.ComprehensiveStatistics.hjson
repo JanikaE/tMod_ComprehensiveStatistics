@@ -50,6 +50,34 @@ UI: {
 		MissingItemContent: Missing content: {0}
 	}
 
+	NPCs: {
+		DialogueGroup: NPC dialogue
+		FinalKillsGroup: Final kills
+		AssistsGroup: Assists
+		WorldDeathsGroup: World deaths
+		ConversationStarted: Conversation started
+		MissingNpcContent: Missing content: {0}
+
+		ChatButtons: {
+			ShopFirst: Shop (first button)
+			QuestFirst: Quest (first button)
+			HelpFirst: Help (first button)
+			HealingFirst: Healing (first button)
+			TaxCollectionFirst: Collect taxes (first button)
+			CurseFirst: Curse (first button)
+			CustomFirst: Custom action (first button)
+			ShopSecond: Shop (second button)
+			WorldStatusOrPurifySecond: World status or purify (second button)
+			CraftingSecond: Crafting (second button)
+			ReforgeSecond: Reforge (second button)
+			HairStyleSecond: Hair style (second button)
+			DyeTradeSecond: Strange plant exchange (second button)
+			MusicSecond: Music toggle (second button)
+			TavernkeepHelpSecond: Eternia Crystal help (second button)
+			CustomSecond: Custom action (second button)
+		}
+	}
+
 	Economy: {
 		PurchasesGroup: Purchases
 		SalesGroup: Sales

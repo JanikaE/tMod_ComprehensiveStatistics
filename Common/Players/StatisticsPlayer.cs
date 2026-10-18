@@ -59,6 +59,7 @@ namespace ComprehensiveStatistics.Common.Players
             new List<ReversibleSaleLot>();
         private readonly List<PendingPickupObservation> pendingPickupObservations =
             new List<PendingPickupObservation>();
+        private int trackedTalkingNpcIndex;
 
         internal CharacterStatisticsData Data { get; private set; }
 
@@ -81,6 +82,7 @@ namespace ComprehensiveStatistics.Common.Players
             ClearPendingSale();
             reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
+            trackedTalkingNpcIndex = -1;
         }
 
         public override void OnEnterWorld()
@@ -95,6 +97,7 @@ namespace ComprehensiveStatistics.Common.Players
             ClearPendingSale();
             reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
+            trackedTalkingNpcIndex = -1;
 
             // B2 临时验收计数只由所属客户端写入，进入世界一次即同时增长两个角色范围。
             if (IsOwnedByLocalClient)
@@ -137,6 +140,7 @@ namespace ComprehensiveStatistics.Common.Players
             ClearPendingSale();
             reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
+            trackedTalkingNpcIndex = -1;
         }
 
         public override void Kill(
@@ -222,6 +226,7 @@ namespace ComprehensiveStatistics.Common.Players
                 ReconcileLifeLoss();
                 TrackMovementDistance();
                 UpdateItemUseTracking();
+                TrackNpcConversation();
             }
 
             // CanBuy/CanSell 与各自的 Post 回调在同一次商店操作中同步成对出现；跨帧
@@ -505,6 +510,87 @@ namespace ComprehensiveStatistics.Common.Players
             Record(
                 StatisticKeys.TaxCollectorCollections,
                 new StatisticMetrics(events: 1L, units: 1L, amount: coinAmount));
+        }
+
+        /// <summary>
+        /// 根据本地玩家的对话目标边沿记录一次新会话；同一 NPC 内的文本刷新不重复计数。
+        /// </summary>
+        private void TrackNpcConversation()
+        {
+            int npcIndex = Player.talkNPC;
+            bool isTalkingToActiveNpc = npcIndex >= 0
+                && npcIndex < Main.npc.Length
+                && Main.npc[npcIndex]?.active == true;
+            if (!isTalkingToActiveNpc)
+            {
+                trackedTalkingNpcIndex = -1;
+                return;
+            }
+
+            if (trackedTalkingNpcIndex == npcIndex)
+            {
+                return;
+            }
+
+            // talkNPC 可在窗口未关闭时直接从一个 NPC 切换到另一个 NPC；目标槽位变化
+            // 同样代表一次新对话。即使稳定键解析失败也先保存目标，避免重复尝试计数。
+            trackedTalkingNpcIndex = npcIndex;
+            NPC npc = Main.npc[npcIndex];
+            if (StableContentKey.TryCreateForNpc(npc, out StableContentKey npcContent))
+            {
+                Record(
+                    StatisticKeys.GetNpcConversationKey(npcContent),
+                    new StatisticMetrics(events: 1L));
+            }
+        }
+
+        /// <summary>
+        /// 记录一次已通过前置许可的 NPC 对话按钮点击，并按 NPC 与按钮功能保存明细。
+        /// </summary>
+        internal void RecordNpcChatButton(NPC npc, NpcChatButtonKind buttonKind)
+        {
+            if (!IsOwnedByLocalClient
+                || npc == null
+                || !StableContentKey.TryCreateForNpc(
+                    npc,
+                    out StableContentKey npcContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetNpcChatButtonKey(npcContent, buttonKind),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 记录一次已归一到 NPC 主体的单人最终击杀。
+        /// </summary>
+        internal void RecordNpcFinalKill(StableContentKey npcContent)
+        {
+            if (!IsOwnedByLocalClient)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetNpcFinalKillKey(npcContent),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 记录一次由服务器确认、且未同时获得最终击杀的 NPC 协助击杀。
+        /// </summary>
+        internal void RecordNpcAssist(StableContentKey npcContent)
+        {
+            if (!IsOwnedByLocalClient)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetNpcAssistKey(npcContent),
+                new StatisticMetrics(events: 1L));
         }
 
         /// <summary>

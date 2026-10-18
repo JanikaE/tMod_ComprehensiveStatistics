@@ -44,6 +44,29 @@ namespace ComprehensiveStatistics.Common.Statistics
     }
 
     /// <summary>
+    /// NPC 对话按钮的稳定功能分类；枚举名称会写入存档，已有成员不可重命名。
+    /// </summary>
+    internal enum NpcChatButtonKind
+    {
+        ShopFirst,
+        QuestFirst,
+        HelpFirst,
+        HealingFirst,
+        TaxCollectionFirst,
+        CurseFirst,
+        CustomFirst,
+        ShopSecond,
+        WorldStatusOrPurifySecond,
+        CraftingSecond,
+        ReforgeSecond,
+        HairStyleSecond,
+        DyeTradeSecond,
+        MusicSecond,
+        TavernkeepHelpSecond,
+        CustomSecond
+    }
+
+    /// <summary>
     /// 集中定义正式统计键，使采集、存档和 UI 使用同一稳定标识。
     /// </summary>
     internal static class StatisticKeys
@@ -57,6 +80,11 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string ItemSaleStatisticId = "economy/sales";
         internal const string NurseHealingStatisticId = "economy/nurse-healing";
         internal const string ItemReforgeStatisticId = "economy/reforges";
+        internal const string NpcConversationStatisticId = "npcs/conversations";
+        internal const string NpcChatButtonStatisticId = "npcs/chat-buttons";
+        internal const string NpcFinalKillStatisticId = "npcs/final-kills";
+        internal const string NpcAssistStatisticId = "npcs/assists";
+        internal const string NpcWorldDeathStatisticId = "npcs/world-deaths";
 
         internal static readonly StatisticKey NurseHealingWithDebuffsRemoved =
             new StatisticKey(NurseHealingStatisticId, style: "debuffs-removed");
@@ -217,6 +245,62 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal static StatisticKey GetItemReforgeKey(StableContentKey itemContent)
         {
             return new StatisticKey(ItemReforgeStatisticId, itemContent);
+        }
+
+        /// <summary>
+        /// 获取指定 NPC 对应的开始对话次数统计键。
+        /// </summary>
+        internal static StatisticKey GetNpcConversationKey(StableContentKey npcContent)
+        {
+            return new StatisticKey(NpcConversationStatisticId, npcContent);
+        }
+
+        /// <summary>
+        /// 获取指定 NPC 与按钮功能组合对应的点击次数统计键。
+        /// </summary>
+        internal static StatisticKey GetNpcChatButtonKey(
+            StableContentKey npcContent,
+            NpcChatButtonKind buttonKind)
+        {
+            return new StatisticKey(
+                NpcChatButtonStatisticId,
+                npcContent,
+                buttonKind.ToString());
+        }
+
+        /// <summary>
+        /// 获取指定 NPC 主体对应的角色最终击杀统计键。
+        /// </summary>
+        internal static StatisticKey GetNpcFinalKillKey(StableContentKey npcContent)
+        {
+            return new StatisticKey(NpcFinalKillStatisticId, npcContent);
+        }
+
+        /// <summary>
+        /// 获取指定 NPC 主体对应的角色协助击杀统计键。
+        /// </summary>
+        internal static StatisticKey GetNpcAssistKey(StableContentKey npcContent)
+        {
+            return new StatisticKey(NpcAssistStatisticId, npcContent);
+        }
+
+        /// <summary>
+        /// 获取指定 NPC 主体对应的当前世界实际死亡统计键。
+        /// </summary>
+        internal static StatisticKey GetNpcWorldDeathKey(StableContentKey npcContent)
+        {
+            return new StatisticKey(NpcWorldDeathStatisticId, npcContent);
+        }
+
+        /// <summary>
+        /// 从存档样式维度恢复 NPC 对话按钮的稳定功能分类。
+        /// </summary>
+        internal static bool TryParseNpcChatButtonKind(
+            string style,
+            out NpcChatButtonKind buttonKind)
+        {
+            return Enum.TryParse(style, ignoreCase: false, out buttonKind)
+                && Enum.IsDefined(typeof(NpcChatButtonKind), buttonKind);
         }
 
         /// <summary>
