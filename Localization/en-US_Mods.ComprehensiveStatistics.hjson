@@ -50,6 +50,19 @@ UI: {
 		MissingItemContent: Missing content: {0}
 	}
 
+	Economy: {
+		PurchasesGroup: Purchases
+		SalesGroup: Sales
+		NurseHealingGroupFormat: Nurse healing ({0:N0} treatments)
+		ReforgesGroup: Goblin reforging
+		TaxCollectorCollectionsGroup: Tax collection
+		SpecialCurrencyPurchasesGroupFormat: Special currency spent ({0})
+		TransactionUnitsColumn: Units
+		CoinAmountColumn: Currency spent / earned
+		MissingMerchantContent: Missing merchant: {0}
+		MissingCurrencyContent: Missing currency: {0}
+	}
+
 	Movement: {
 		MovementModes: Total distance traveled
 		PreviouslyUnclassified: Other or unclassified
@@ -122,6 +135,8 @@ UI: {
 		ValueColumn: Value
 		DistanceColumn: Distance
 		NoResults: No entries match the current filters
+		CollapseAll: Collapse all
+		ExpandAll: Expand all
 		MetricFormat: "{0:N0} units / {1:N0} events"
 		EventsFormat: "{0:N0} events"
 		AmountFormat: "{0:N0}"

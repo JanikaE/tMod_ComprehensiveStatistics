@@ -51,6 +51,21 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string ItemPickupStatisticId = "items/pickups";
         internal const string ItemUseStatisticId = "items/uses";
         internal const string ItemDiscardStatisticId = "items/discards";
+        internal const string ItemPurchaseStatisticId = "economy/purchases";
+        internal const string SpecialCurrencyPurchaseStatisticId =
+            "economy/purchases/special-currency";
+        internal const string ItemSaleStatisticId = "economy/sales";
+        internal const string NurseHealingStatisticId = "economy/nurse-healing";
+        internal const string ItemReforgeStatisticId = "economy/reforges";
+
+        internal static readonly StatisticKey NurseHealingWithDebuffsRemoved =
+            new StatisticKey(NurseHealingStatisticId, style: "debuffs-removed");
+
+        internal static readonly StatisticKey NurseHealingWithoutDebuffsRemoved =
+            new StatisticKey(NurseHealingStatisticId, style: "no-debuffs-removed");
+
+        internal static readonly StatisticKey TaxCollectorCollections =
+            new StatisticKey("economy/tax-collector-collections");
 
         internal static readonly StatisticKey TotalMovementDistance =
             new StatisticKey("movement/total-distance");
@@ -117,6 +132,91 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal static StatisticKey GetItemDiscardKey(StableContentKey content)
         {
             return new StatisticKey(ItemDiscardStatisticId, content);
+        }
+
+        /// <summary>
+        /// 获取指定物品与商人组合对应的买入统计键。
+        /// </summary>
+        internal static StatisticKey GetItemPurchaseKey(
+            StableContentKey itemContent,
+            StableContentKey merchantContent)
+        {
+            // StatisticKey 的 Content 保存表格叶子项物品，Style 保存第二个稳定维度商人；
+            // 两者都不依赖运行时数字 ID，模组加载顺序改变后仍可恢复。
+            return new StatisticKey(
+                ItemPurchaseStatisticId,
+                itemContent,
+                merchantContent.ToString());
+        }
+
+        /// <summary>
+        /// 获取物品、商人和特殊货币组合对应的买入统计键。
+        /// </summary>
+        internal static StatisticKey GetSpecialCurrencyItemPurchaseKey(
+            StableContentKey itemContent,
+            StableContentKey merchantContent,
+            StableContentKey currencyContent)
+        {
+            return new StatisticKey(
+                SpecialCurrencyPurchaseStatisticId,
+                itemContent,
+                $"{merchantContent}|{currencyContent}");
+        }
+
+        /// <summary>
+        /// 从特殊货币买入统计的样式维度恢复商人与货币代表物品。
+        /// </summary>
+        internal static bool TryParseSpecialCurrencyPurchaseStyle(
+            string style,
+            out StableContentKey merchantContent,
+            out StableContentKey currencyContent)
+        {
+            int separatorIndex = style?.IndexOf('|') ?? -1;
+            if (separatorIndex <= 0 || separatorIndex >= style.Length - 1)
+            {
+                merchantContent = default;
+                currencyContent = default;
+                return false;
+            }
+
+            bool merchantParsed = StableContentKey.TryParse(
+                style.Substring(0, separatorIndex),
+                out merchantContent);
+            bool currencyParsed = StableContentKey.TryParse(
+                style.Substring(separatorIndex + 1),
+                out currencyContent);
+            return merchantParsed && currencyParsed;
+        }
+
+        /// <summary>
+        /// 获取指定物品与商人组合对应的卖出统计键。
+        /// </summary>
+        internal static StatisticKey GetItemSaleKey(
+            StableContentKey itemContent,
+            StableContentKey merchantContent)
+        {
+            return new StatisticKey(
+                ItemSaleStatisticId,
+                itemContent,
+                merchantContent.ToString());
+        }
+
+        /// <summary>
+        /// 获取一次护士治疗按是否移除 Debuff 分类后的统计键。
+        /// </summary>
+        internal static StatisticKey GetNurseHealingKey(bool removedDebuffs)
+        {
+            return removedDebuffs
+                ? NurseHealingWithDebuffsRemoved
+                : NurseHealingWithoutDebuffsRemoved;
+        }
+
+        /// <summary>
+        /// 获取指定物品对应的成功重铸统计键。
+        /// </summary>
+        internal static StatisticKey GetItemReforgeKey(StableContentKey itemContent)
+        {
+            return new StatisticKey(ItemReforgeStatisticId, itemContent);
         }
 
         /// <summary>

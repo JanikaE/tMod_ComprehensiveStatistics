@@ -49,6 +49,14 @@ namespace ComprehensiveStatistics.Common.Players
         private bool hasActiveChanneledItemUse;
         private int activeChanneledItemType;
         private int activeChanneledAltFunctionUse;
+        private bool hasPendingBuy;
+        private PendingBuySnapshot pendingBuy;
+        private bool hasPendingReforge;
+        private PendingReforgeSnapshot pendingReforge;
+        private bool hasPendingSale;
+        private PendingSaleSnapshot pendingSale;
+        private readonly List<ReversibleSaleLot> reversibleSaleLots =
+            new List<ReversibleSaleLot>();
         private readonly List<PendingPickupObservation> pendingPickupObservations =
             new List<PendingPickupObservation>();
 
@@ -68,6 +76,10 @@ namespace ComprehensiveStatistics.Common.Players
             ClearPendingDeathSources();
             ResetMovementTracking();
             ResetItemUseTracking();
+            ClearPendingBuy();
+            ClearPendingReforge();
+            ClearPendingSale();
+            reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
         }
 
@@ -78,6 +90,10 @@ namespace ComprehensiveStatistics.Common.Players
             ResetLifeLossTracking();
             ResetMovementTracking();
             ResetItemUseTracking();
+            ClearPendingBuy();
+            ClearPendingReforge();
+            ClearPendingSale();
+            reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
 
             // B2 临时验收计数只由所属客户端写入，进入世界一次即同时增长两个角色范围。
@@ -116,6 +132,10 @@ namespace ComprehensiveStatistics.Common.Players
             ClearPendingDeathSources();
             ResetMovementTracking();
             ResetItemUseTracking();
+            ClearPendingBuy();
+            ClearPendingReforge();
+            ClearPendingSale();
+            reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
         }
 
@@ -203,6 +223,288 @@ namespace ComprehensiveStatistics.Common.Players
                 TrackMovementDistance();
                 UpdateItemUseTracking();
             }
+
+            // CanBuy/CanSell 与各自的 Post 回调在同一次商店操作中同步成对出现；跨帧
+            // 未消费的快照只能来自被其他模组阻止或失败的交易，必须丢弃。
+            ClearPendingBuy();
+            ClearPendingReforge();
+            ClearPendingSale();
+
+            // 回购只能发生在当前打开的商店；关闭商店后不再允许旧出售批次被撤销。
+            if (Main.npcShop <= 0)
+            {
+                reversibleSaleLots.Clear();
+            }
+        }
+
+        public override bool CanBuyItem(NPC vendor, Item[] shopInventory, Item item)
+        {
+            ClearPendingBuy();
+            if (!IsOwnedByLocalClient
+                || vendor == null
+                || item == null
+                || item.IsAir
+                || !StableContentKey.TryCreateForItem(
+                    item.type,
+                    out StableContentKey itemContent)
+                || !StableContentKey.TryCreateForNpc(
+                    vendor,
+                    out StableContentKey merchantContent))
+            {
+                return true;
+            }
+
+            Player.GetItemExpectedPrice(item, out _, out long amountSpent);
+            amountSpent = Math.Max(0L, amountSpent);
+            bool isSpecialCurrency = item.shopSpecialCurrency != CustomCurrencyID.None;
+            StableContentKey? specialCurrencyContent = null;
+            if (isSpecialCurrency
+                && SpecialCurrencyResolver.TryResolve(
+                    item.shopSpecialCurrency,
+                    out StableContentKey resolvedCurrency,
+                    out _))
+            {
+                specialCurrencyContent = resolvedCurrency;
+            }
+
+            // CanBuyItem 收到的是实际点击的商店槽位，能够在 PostBuyItem 的鼠标物品
+            // 已合并堆叠前冻结单件价格，并用 buyOnce 区分玩家刚卖出的回购物品。
+            pendingBuy = new PendingBuySnapshot(
+                item.type,
+                itemContent,
+                merchantContent,
+                item.buyOnce,
+                amountSpent,
+                isSpecialCurrency,
+                specialCurrencyContent);
+            hasPendingBuy = true;
+            return true;
+        }
+
+        public override void PostBuyItem(NPC vendor, Item[] shopInventory, Item item)
+        {
+            if (!hasPendingBuy)
+            {
+                return;
+            }
+
+            PendingBuySnapshot purchase = pendingBuy;
+            ClearPendingBuy();
+            // 此回调只在购买者本地客户端成功付款后触发，正好符合个人统计的权威边界。
+            if (!IsOwnedByLocalClient
+                || vendor == null
+                || item == null
+                || item.type != purchase.ItemType
+                || !StableContentKey.TryCreateForNpc(
+                    vendor,
+                    out StableContentKey merchantContent))
+            {
+                return;
+            }
+
+            if (merchantContent != purchase.MerchantContent)
+            {
+                return;
+            }
+
+            if (purchase.IsBuyback)
+            {
+                // 从回购栏买回只是撤销此前的一件出售，不形成新的买入记录。
+                UndoMatchingSale(purchase.ItemContent, purchase.MerchantContent);
+                return;
+            }
+
+            // 原版商店在一次快速购买循环中逐件付款并逐件触发 PostBuyItem，传入的
+            // item.stack 却是鼠标物品的累计堆叠。每次回调固定记 1 个单位，才能避免
+            // 连续购买时把 1、2、3……错误累加为数量。一次成功付款就是一次购买事件。
+            // 无法稳定标识的第三方货币宁可不落盘，也不能混入金币支出。
+            if (purchase.IsSpecialCurrency && !purchase.SpecialCurrencyContent.HasValue)
+            {
+                return;
+            }
+
+            StatisticKey purchaseKey = purchase.SpecialCurrencyContent.HasValue
+                ? StatisticKeys.GetSpecialCurrencyItemPurchaseKey(
+                    purchase.ItemContent,
+                    purchase.MerchantContent,
+                    purchase.SpecialCurrencyContent.Value)
+                : StatisticKeys.GetItemPurchaseKey(
+                    purchase.ItemContent,
+                    purchase.MerchantContent);
+            Record(
+                purchaseKey,
+                new StatisticMetrics(
+                    events: 1L,
+                    units: 1L,
+                    amount: purchase.AmountSpent));
+        }
+
+        public override bool CanSellItem(NPC vendor, Item[] shopInventory, Item item)
+        {
+            ClearPendingSale();
+            if (!IsOwnedByLocalClient
+                || vendor == null
+                || item == null
+                || item.IsAir
+                || item.stack <= 0
+                || !StableContentKey.TryCreateForItem(
+                    item.type,
+                    out StableContentKey itemContent)
+                || !StableContentKey.TryCreateForNpc(
+                    vendor,
+                    out StableContentKey merchantContent))
+            {
+                return true;
+            }
+
+            // PostSellItem 收到的是已经加入商店、甚至已与原库存合并后的实例；出售前
+            // 在这里冻结数量和实际收入，快速出售与鼠标出售即可共享同一条准确链路。
+            pendingSale = CreatePendingSaleSnapshot(
+                item,
+                itemContent,
+                merchantContent);
+            hasPendingSale = true;
+            return true;
+        }
+
+        public override void PostSellItem(NPC vendor, Item[] shopInventory, Item item)
+        {
+            if (!hasPendingSale)
+            {
+                return;
+            }
+
+            PendingSaleSnapshot sale = pendingSale;
+            ClearPendingSale();
+            if (!IsOwnedByLocalClient
+                || vendor == null
+                || item == null
+                || item.type != sale.ItemType
+                || !StableContentKey.TryCreateForNpc(
+                    vendor,
+                    out StableContentKey merchantContent)
+                || merchantContent != sale.MerchantContent)
+            {
+                return;
+            }
+
+            if (sale.PurchaseReversalUnits > 0)
+            {
+                // 原价退回的数量只撤销近期买入，不同时生成卖出统计。
+                Unrecord(
+                    StatisticKeys.GetItemPurchaseKey(
+                        sale.ItemContent,
+                        sale.MerchantContent),
+                    new StatisticMetrics(
+                        events: sale.PurchaseReversalUnits,
+                        units: sale.PurchaseReversalUnits,
+                        amount: sale.PurchaseReversalCoinAmount));
+            }
+
+            if (sale.RecordedUnits <= 0)
+            {
+                return;
+            }
+
+            StatisticKey saleKey = StatisticKeys.GetItemSaleKey(
+                sale.ItemContent,
+                sale.MerchantContent);
+            Record(
+                saleKey,
+                new StatisticMetrics(
+                    events: 1L,
+                    units: sale.RecordedUnits,
+                    amount: sale.RecordedCoinIncome));
+            reversibleSaleLots.Add(new ReversibleSaleLot(
+                saleKey,
+                sale.ItemContent,
+                sale.MerchantContent,
+                sale.RecordedUnits,
+                sale.RecordedUnitCoinIncome));
+        }
+
+        public override void PostNurseHeal(
+            NPC nurse,
+            int health,
+            bool removeDebuffs,
+            int price)
+        {
+            // 该成功回调仅在接受治疗的本地客户端触发；三个累计口径依次保存
+            // 治疗次数、实际恢复生命和实际支付的铜币数。
+            if (!IsOwnedByLocalClient || nurse == null)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetNurseHealingKey(removeDebuffs),
+                new StatisticMetrics(
+                    events: 1L,
+                    units: Math.Max(0, health),
+                    amount: Math.Max(0, price)));
+        }
+
+        /// <summary>
+        /// 保存原版重铸扣款成功时的物品和实际铜币费用，等待成功回调提交。
+        /// </summary>
+        internal void ObserveReforgePayment(Item item, long price)
+        {
+            ClearPendingReforge();
+            if (!IsOwnedByLocalClient
+                || item == null
+                || item.IsAir
+                || !StableContentKey.TryCreateForItem(
+                    item.type,
+                    out StableContentKey itemContent))
+            {
+                return;
+            }
+
+            pendingReforge = new PendingReforgeSnapshot(
+                item.type,
+                itemContent,
+                Math.Max(0L, price));
+            hasPendingReforge = true;
+        }
+
+        /// <summary>
+        /// 在 PostReforge 确认完成后提交一次重铸统计。
+        /// </summary>
+        internal void RecordSuccessfulReforge(Item item)
+        {
+            if (!hasPendingReforge)
+            {
+                return;
+            }
+
+            PendingReforgeSnapshot reforge = pendingReforge;
+            ClearPendingReforge();
+            if (!IsOwnedByLocalClient
+                || item == null
+                || item.IsAir
+                || item.type != reforge.ItemType)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetItemReforgeKey(reforge.ItemContent),
+                new StatisticMetrics(events: 1L, amount: reforge.CoinSpent));
+        }
+
+        /// <summary>
+        /// 记录一次从税收官成功领取的实际铜币金额。
+        /// </summary>
+        internal void RecordTaxCollection(long coinAmount)
+        {
+            if (!IsOwnedByLocalClient || coinAmount < 0L)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.TaxCollectorCollections,
+                new StatisticMetrics(events: 1L, units: 1L, amount: coinAmount));
         }
 
         /// <summary>
@@ -249,6 +551,96 @@ namespace ComprehensiveStatistics.Common.Players
             Record(
                 StatisticKeys.GetItemUseKey(content),
                 new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 创建出售前快照，将原价退还数量与真正出售数量拆开。
+        /// </summary>
+        private PendingSaleSnapshot CreatePendingSaleSnapshot(
+            Item item,
+            StableContentKey itemContent,
+            StableContentKey merchantContent)
+        {
+            Player.GetItemExpectedPrice(
+                item,
+                out long expectedSellingPrice,
+                out long expectedBuyingPrice);
+            int sellbackUnits = Main.shopSellbackHelper?.GetAmount(item) ?? 0;
+            sellbackUnits = Math.Min(Math.Max(sellbackUnits, 0), item.stack);
+            int recordedUnits = item.stack - sellbackUnits;
+            long normalUnitIncome = expectedSellingPrice > 0L
+                ? Math.Max(1L, expectedSellingPrice / 5L)
+                : 0L;
+            long sellbackUnitIncome = Math.Max(0L, expectedBuyingPrice);
+            return new PendingSaleSnapshot(
+                item.type,
+                itemContent,
+                merchantContent,
+                recordedUnits,
+                normalUnitIncome,
+                SaturatingMultiply(normalUnitIncome, recordedUnits),
+                sellbackUnits,
+                SaturatingMultiply(sellbackUnitIncome, sellbackUnits));
+        }
+
+        /// <summary>
+        /// 撤销当前商店会话内最近一笔匹配出售中的一个单位。
+        /// </summary>
+        private void UndoMatchingSale(
+            StableContentKey itemContent,
+            StableContentKey merchantContent)
+        {
+            for (int index = reversibleSaleLots.Count - 1; index >= 0; index--)
+            {
+                ReversibleSaleLot lot = reversibleSaleLots[index];
+                if (lot.ItemContent != itemContent
+                    || lot.MerchantContent != merchantContent)
+                {
+                    continue;
+                }
+
+                lot.RemainingUnits--;
+                bool exhausted = lot.RemainingUnits <= 0;
+                Unrecord(
+                    lot.Key,
+                    new StatisticMetrics(
+                        events: exhausted ? 1L : 0L,
+                        units: 1L,
+                        amount: lot.UnitCoinIncome));
+                if (exhausted)
+                {
+                    reversibleSaleLots.RemoveAt(index);
+                }
+
+                return;
+            }
+        }
+
+        /// <summary>
+        /// 清除只允许在一次同步购买调用链内存在的购买前快照。
+        /// </summary>
+        private void ClearPendingBuy()
+        {
+            hasPendingBuy = false;
+            pendingBuy = default;
+        }
+
+        /// <summary>
+        /// 清除只允许在一次同步重铸调用链内存在的扣款快照。
+        /// </summary>
+        private void ClearPendingReforge()
+        {
+            hasPendingReforge = false;
+            pendingReforge = default;
+        }
+
+        /// <summary>
+        /// 清除只允许在一次同步出售调用链内存在的出售前快照。
+        /// </summary>
+        private void ClearPendingSale()
+        {
+            hasPendingSale = false;
+            pendingSale = default;
         }
 
         /// <summary>
@@ -333,6 +725,10 @@ namespace ComprehensiveStatistics.Common.Players
             ResetLifeLossTracking();
             ResetMovementTracking();
             ResetItemUseTracking();
+            ClearPendingBuy();
+            ClearPendingReforge();
+            ClearPendingSale();
+            reversibleSaleLots.Clear();
             pendingPickupObservations.Clear();
         }
 
@@ -879,6 +1275,17 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 从角色生涯及当前世界切片同时撤销一笔已记录的可逆交易。
+        /// </summary>
+        private void Unrecord(StatisticKey key, StatisticMetrics delta)
+        {
+            EnsureCurrentWorldSlice();
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            Data.Subtract(currentWorldId, key, delta, now);
+            currentWorldSlice = Data.GetOrCreateWorldSlice(currentWorldId, now);
+        }
+
+        /// <summary>
         /// 确保缓存的世界统计切片与当前世界唯一标识一致。
         /// </summary>
         private void EnsureCurrentWorldSlice()
@@ -1095,6 +1502,19 @@ namespace ComprehensiveStatistics.Common.Players
             return left > long.MaxValue - right ? long.MaxValue : left + right;
         }
 
+        /// <summary>
+        /// 安全相乘两个非负累计值，避免模组物品的异常堆叠或价格造成溢出。
+        /// </summary>
+        private static long SaturatingMultiply(long left, long right)
+        {
+            if (left <= 0L || right <= 0L)
+            {
+                return 0L;
+            }
+
+            return left > long.MaxValue / right ? long.MaxValue : left * right;
+        }
+
         private bool IsOwnedByLocalClient =>
             Main.netMode != NetmodeID.Server && Player.whoAmI == Main.myPlayer;
 
@@ -1129,6 +1549,150 @@ namespace ComprehensiveStatistics.Common.Players
             internal int OriginalStack { get; }
 
             internal StableContentKey Content { get; }
+        }
+
+        /// <summary>
+        /// 保存 CanBuyItem 时的购买真值，避免 PostBuyItem 中已合并的鼠标物品污染统计。
+        /// </summary>
+        private readonly struct PendingBuySnapshot
+        {
+            /// <summary>
+            /// 创建一次待成功回调确认的购买前快照。
+            /// </summary>
+            internal PendingBuySnapshot(
+                int itemType,
+                StableContentKey itemContent,
+                StableContentKey merchantContent,
+                bool isBuyback,
+                long amountSpent,
+                bool isSpecialCurrency,
+                StableContentKey? specialCurrencyContent)
+            {
+                ItemType = itemType;
+                ItemContent = itemContent;
+                MerchantContent = merchantContent;
+                IsBuyback = isBuyback;
+                AmountSpent = amountSpent;
+                IsSpecialCurrency = isSpecialCurrency;
+                SpecialCurrencyContent = specialCurrencyContent;
+            }
+
+            internal int ItemType { get; }
+
+            internal StableContentKey ItemContent { get; }
+
+            internal StableContentKey MerchantContent { get; }
+
+            internal bool IsBuyback { get; }
+
+            internal long AmountSpent { get; }
+
+            internal bool IsSpecialCurrency { get; }
+
+            internal StableContentKey? SpecialCurrencyContent { get; }
+        }
+
+        /// <summary>
+        /// 保存重铸扣款后的物品身份和实际费用，只有 PostReforge 才能消费该快照。
+        /// </summary>
+        private readonly struct PendingReforgeSnapshot
+        {
+            /// <summary>
+            /// 创建一次待成功回调确认的重铸扣款快照。
+            /// </summary>
+            internal PendingReforgeSnapshot(
+                int itemType,
+                StableContentKey itemContent,
+                long coinSpent)
+            {
+                ItemType = itemType;
+                ItemContent = itemContent;
+                CoinSpent = coinSpent;
+            }
+
+            internal int ItemType { get; }
+
+            internal StableContentKey ItemContent { get; }
+
+            internal long CoinSpent { get; }
+        }
+
+        /// <summary>
+        /// 保存 CanSellItem 时的出售真值，避免 PostSellItem 中已经变形的商店物品污染统计。
+        /// </summary>
+        private readonly struct PendingSaleSnapshot
+        {
+            /// <summary>
+            /// 创建一次待成功回调确认的出售前快照。
+            /// </summary>
+            internal PendingSaleSnapshot(
+                int itemType,
+                StableContentKey itemContent,
+                StableContentKey merchantContent,
+                int recordedUnits,
+                long recordedUnitCoinIncome,
+                long recordedCoinIncome,
+                int purchaseReversalUnits,
+                long purchaseReversalCoinAmount)
+            {
+                ItemType = itemType;
+                ItemContent = itemContent;
+                MerchantContent = merchantContent;
+                RecordedUnits = recordedUnits;
+                RecordedUnitCoinIncome = recordedUnitCoinIncome;
+                RecordedCoinIncome = recordedCoinIncome;
+                PurchaseReversalUnits = purchaseReversalUnits;
+                PurchaseReversalCoinAmount = purchaseReversalCoinAmount;
+            }
+
+            internal int ItemType { get; }
+
+            internal StableContentKey ItemContent { get; }
+
+            internal StableContentKey MerchantContent { get; }
+
+            internal int RecordedUnits { get; }
+
+            internal long RecordedUnitCoinIncome { get; }
+
+            internal long RecordedCoinIncome { get; }
+
+            internal int PurchaseReversalUnits { get; }
+
+            internal long PurchaseReversalCoinAmount { get; }
+        }
+
+        /// <summary>
+        /// 保存当前商店会话内尚可通过回购撤销的出售批次。
+        /// </summary>
+        private sealed class ReversibleSaleLot
+        {
+            /// <summary>
+            /// 创建一个按单位逐步消耗的可回购出售批次。
+            /// </summary>
+            internal ReversibleSaleLot(
+                StatisticKey key,
+                StableContentKey itemContent,
+                StableContentKey merchantContent,
+                int remainingUnits,
+                long unitCoinIncome)
+            {
+                Key = key;
+                ItemContent = itemContent;
+                MerchantContent = merchantContent;
+                RemainingUnits = remainingUnits;
+                UnitCoinIncome = unitCoinIncome;
+            }
+
+            internal StatisticKey Key { get; }
+
+            internal StableContentKey ItemContent { get; }
+
+            internal StableContentKey MerchantContent { get; }
+
+            internal int RemainingUnits { get; set; }
+
+            internal long UnitCoinIncome { get; }
         }
     }
 }

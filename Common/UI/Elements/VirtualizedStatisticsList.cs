@@ -41,6 +41,16 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private float lastViewportHeight = -1f;
         private bool isEmptyTextAttached;
 
+        internal event Action ExpansionStateChanged;
+
+        internal bool HasExpandableGroups => visibleEntries.Any(entry =>
+            entry.Group != null && entry.Group.ShowChildren);
+
+        internal bool HasExpandedGroups => visibleEntries.Any(entry =>
+            entry.Group != null
+            && entry.Group.ShowChildren
+            && entry.Group.IsExpanded);
+
         /// <summary>
         /// 创建仅实例化可见行的分组统计列表。
         /// </summary>
@@ -87,6 +97,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             groups.AddRange(newGroups);
             ApplyExpansionStates(groups, parentPath: string.Empty);
             ApplySort(resetScroll: true);
+            ExpansionStateChanged?.Invoke();
         }
 
         /// <summary>
@@ -99,6 +110,18 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             sortColumn = StatisticsListSortColumn.Name;
             sortDirection = StatisticsListSortDirection.None;
             ApplySort(resetScroll: true);
+            ExpansionStateChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// 统一设置当前列表中全部可展开分组，并保存为本次窗口会话的折叠状态。
+        /// </summary>
+        internal void SetAllGroupsExpanded(bool expanded)
+        {
+            SetExpansionState(groups, expanded);
+            CaptureExpansionStates(groups, parentPath: string.Empty);
+            RebuildVisibleEntries(resetScroll: true);
+            ExpansionStateChanged?.Invoke();
         }
 
         /// <summary>
@@ -111,6 +134,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             searchQuery = newSearchQuery?.Trim() ?? string.Empty;
             sourceFilter = newSourceFilter;
             RebuildVisibleEntries(resetScroll: true);
+            ExpansionStateChanged?.Invoke();
         }
 
         public override void Update(GameTime gameTime)
@@ -212,6 +236,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                         entry.TotalEvents,
                         entry.TotalUnits,
                         entry.TotalAmount,
+                        group.IconType,
+                        group.Icon,
+                        group.IconKind,
+                        group.AmountIconType,
+                        group.AmountIcon,
                         entry.MetricDisplay,
                         entry.Depth,
                         entry.UseAlternateColor,
@@ -238,7 +267,23 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             group.IsExpanded = !group.IsExpanded;
             CaptureExpansionStates(groups, parentPath: string.Empty);
             RebuildVisibleEntries(resetScroll: false);
+            ExpansionStateChanged?.Invoke();
             SoundEngine.PlaySound(SoundID.MenuTick);
+        }
+
+        private static void SetExpansionState(
+            IEnumerable<StatisticsListGroup> sourceGroups,
+            bool expanded)
+        {
+            foreach (StatisticsListGroup group in sourceGroups)
+            {
+                if (group.ShowChildren)
+                {
+                    group.IsExpanded = expanded;
+                }
+
+                SetExpansionState(group.ChildGroups, expanded);
+            }
         }
 
         /// <summary>
@@ -609,6 +654,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 StatisticsMetricDisplay.Mixed => 254f,
                 StatisticsMetricDisplay.ItemActivity => 370f,
+                StatisticsMetricDisplay.EconomyTransactions => 370f,
                 _ => 160f
             };
             AddColumnHeader(
@@ -658,6 +704,25 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     StatisticsListSortColumn.Amount,
                     leftPixels: -138f,
                     widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.EconomyTransactions)
+            {
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Economy.TransactionUnitsColumn",
+                    StatisticsListSortColumn.Units,
+                    leftPixels: -370f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Economy.CoinAmountColumn",
+                    StatisticsListSortColumn.Amount,
+                    leftPixels: -254f,
+                    widthPixels: 232f,
                     widthPercent: 0f,
                     leftPercent: 1f);
                 return;

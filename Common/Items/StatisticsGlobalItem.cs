@@ -36,5 +36,13 @@ namespace ComprehensiveStatistics.Common.Items
 
             return null;
         }
+
+        public override void PostReforge(Item item)
+        {
+            // 只有实际扣款并走到原版成功后置回调的重铸才会被 StatisticsPlayer 接受。
+            Main.LocalPlayer?
+                .GetModPlayer<StatisticsPlayer>()
+                .RecordSuccessfulReforge(item);
+        }
     }
 }

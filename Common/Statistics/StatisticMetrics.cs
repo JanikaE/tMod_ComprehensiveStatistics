@@ -53,6 +53,17 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 将另一组指标逐项扣除并在零处截断，用于撤销已确认的可逆交易。
+        /// </summary>
+        internal StatisticMetrics Subtract(StatisticMetrics other)
+        {
+            return new StatisticMetrics(
+                Math.Max(0L, Events - other.Events),
+                Math.Max(0L, Units - other.Units),
+                Math.Max(0L, Amount - other.Amount));
+        }
+
+        /// <summary>
         /// 判断两组指标的三个统计口径是否完全相同。
         /// </summary>
         public bool Equals(StatisticMetrics other)

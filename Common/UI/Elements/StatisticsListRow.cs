@@ -5,6 +5,7 @@ using ReLogic.Content;
 using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
+using Terraria.ID;
 using Terraria.Localization;
 using Terraria.UI;
 
@@ -19,12 +20,27 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private const float MarkerLeft = 2f;
         private const float IconCenter = 14f;
         private const float NameLeft = 28f;
+        private const float GroupIconAfterMarkerOffset = 14f;
+        private const float GroupNameAfterMarkerOffset = 16f;
         private const float NameRightReserve = 138f;
         private const float MixedNameRightReserve = 254f;
         private const float MixedEventsRight = 132f;
         private const float ItemActivityNameRightReserve = 370f;
         private const float ItemActivityPickupUnitsRight = 236f;
         private const float ItemActivityUseEventsRight = 120f;
+        private const float EconomyCoinIconSize = 18f;
+
+        // 经济页的四种币图标使用固定槽位；数字右对齐到对应图标左侧，使不同位数的
+        // 金额不会推动图标位置。偏移以行内容区右边缘为基准，顺序为铂、金、银、铜。
+        private static readonly float[] EconomyCoinIconRightOffsets = { 182f, 125f, 68f, 11f };
+        private static readonly float[] EconomyCoinTextRightOffsets = { 194f, 137f, 80f, 23f };
+        private static readonly int[] EconomyCoinItemTypes =
+        {
+            ItemID.PlatinumCoin,
+            ItemID.GoldCoin,
+            ItemID.SilverCoin,
+            ItemID.CopperCoin
+        };
 
         private static readonly Color DimmedGroupMetricColor = new Color(145, 154, 181);
         private static readonly Color DimmedItemMetricColor = new Color(112, 122, 151);
@@ -35,14 +51,19 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private readonly UIText eventsText;
         private readonly UIText unitsText;
         private readonly UIText valueText;
+        private readonly UIText[] economyCoinTexts = new UIText[4];
+        private readonly long[] economyCoinValues = new long[4];
         private Action clickAction;
         private Asset<Texture2D> icon;
         private int iconType;
         private StatisticsIconKind iconKind;
-        private bool isGroup;
         private int depth;
         private bool useAlternateColor;
+        private bool showEconomyCoins;
+        private int economySpecialCurrencyItemType;
+        private Asset<Texture2D> economySpecialCurrencyIcon;
         private float iconOffset = IconCenter;
+        private Color economyCoinIconColor = Color.White;
 
         /// <summary>
         /// 创建可在分组与叶子项之间复用的统计列表行。
@@ -85,6 +106,16 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             valueText.HAlign = 1f;
             valueText.VAlign = 0.5f;
             Append(valueText);
+
+            for (int index = 0; index < economyCoinTexts.Length; index++)
+            {
+                UIText coinText = new UIText(string.Empty, 0.76f);
+                coinText.Left.Set(-EconomyCoinTextRightOffsets[index], 0f);
+                coinText.HAlign = 1f;
+                coinText.VAlign = 0.5f;
+                economyCoinTexts[index] = coinText;
+                Append(coinText);
+            }
         }
 
         /// <summary>
@@ -97,28 +128,43 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long totalEvents,
             long totalUnits,
             long totalAmount,
+            int groupIconType,
+            Asset<Texture2D> groupIcon,
+            StatisticsIconKind groupIconKind,
+            int amountIconType,
+            Asset<Texture2D> amountIcon,
             StatisticsMetricDisplay metricDisplay,
             int depth,
             bool useAlternateColor,
             Action onClick)
         {
-            // 分组行不显示图标，左侧区域改为展开状态标记。
-            isGroup = true;
+            // 可展开且带图标的分组依次显示箭头、图标和名称；不可展开分组直接复用
+            // 普通内容行的图标槽位。
             this.depth = depth;
             this.useAlternateColor = useAlternateColor;
             clickAction = canExpand ? onClick : null;
-            iconType = 0;
-            iconKind = StatisticsIconKind.None;
+            iconType = groupIconType;
+            iconKind = groupIcon == null ? StatisticsIconKind.None : groupIconKind;
             markerText.Left.Set(MarkerLeft + depth * HierarchyIndent, 0f);
             markerText.SetText(canExpand ? (isExpanded ? "▼" : "▶") : string.Empty);
             markerText.TextColor = new Color(225, 232, 255);
 
-            icon = null;
+            icon = groupIcon;
+            bool reserveExpansionSlotForIcon = canExpand && icon != null;
+            iconOffset = IconCenter
+                + depth * HierarchyIndent
+                + (reserveExpansionSlotForIcon ? GroupIconAfterMarkerOffset : 0f);
 
-            SetNameIndent(depth, metricDisplay);
+            SetNameIndent(depth, metricDisplay, reserveExpansionSlotForIcon);
             nameText.SetText(name);
             nameText.TextColor = new Color(238, 241, 255);
-            SetMetrics(totalUnits, totalEvents, totalAmount, metricDisplay);
+            SetMetrics(
+                totalUnits,
+                totalEvents,
+                totalAmount,
+                metricDisplay,
+                amountIconType,
+                amountIcon);
             SetMetricColors(
                 totalUnits,
                 totalEvents,
@@ -138,7 +184,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             bool useAlternateColor)
         {
             // 子项恢复图标缩进，并清除行池上一次绑定的分组点击动作。
-            isGroup = false;
             this.depth = depth;
             this.useAlternateColor = useAlternateColor;
             clickAction = null;
@@ -153,7 +198,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             SetNameIndent(depth, metricDisplay);
             nameText.SetText(item.Name);
             nameText.TextColor = new Color(205, 214, 239);
-            SetMetrics(item.Units, item.Events, item.Amount, metricDisplay);
+            SetMetrics(
+                item.Units,
+                item.Events,
+                item.Amount,
+                metricDisplay,
+                item.AmountIconType,
+                item.AmountIcon);
             SetMetricColors(
                 item.Units,
                 item.Events,
@@ -177,6 +228,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             eventsText.SetText(string.Empty);
             unitsText.SetText(string.Empty);
             valueText.SetText(string.Empty);
+            HideEconomyCoins();
             icon = null;
         }
 
@@ -240,11 +292,22 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 backgroundRectangle,
                 BackgroundColor);
 
-            if (isGroup || icon == null)
+            if (icon != null)
             {
-                return;
+                DrawContentIcon(spriteBatch, dimensions);
             }
 
+            if (showEconomyCoins)
+            {
+                DrawEconomyCoinIcons(spriteBatch, dimensions);
+            }
+        }
+
+        /// <summary>
+        /// 绘制叶子项或分组的物品、NPC、Buff 图标。
+        /// </summary>
+        private void DrawContentIcon(SpriteBatch spriteBatch, CalculatedStyle dimensions)
+        {
             // 只在虚拟化后的可见行访问 Value，使尚未出现过的内容贴图按需完成加载。
             Texture2D texture = icon.Value;
             Rectangle sourceRectangle = GetFirstIconFrame(texture, iconType, iconKind);
@@ -260,6 +323,69 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 iconCenter,
                 sourceRectangle,
                 Color.White,
+                0f,
+                sourceRectangle.Size() * 0.5f,
+                scale,
+                SpriteEffects.None,
+                0f);
+        }
+
+        /// <summary>
+        /// 在固定的四个币种槽位中绘制当前行可见的金币图标。
+        /// </summary>
+        private void DrawEconomyCoinIcons(SpriteBatch spriteBatch, CalculatedStyle dimensions)
+        {
+            if (economySpecialCurrencyIcon != null)
+            {
+                DrawEconomyCurrencyIcon(
+                    spriteBatch,
+                    dimensions,
+                    economySpecialCurrencyIcon.Value,
+                    economySpecialCurrencyItemType,
+                    EconomyCoinIconRightOffsets[EconomyCoinIconRightOffsets.Length - 1]);
+                return;
+            }
+
+            for (int index = 0; index < EconomyCoinItemTypes.Length; index++)
+            {
+                if (string.IsNullOrEmpty(economyCoinTexts[index].Text))
+                {
+                    continue;
+                }
+
+                int itemType = EconomyCoinItemTypes[index];
+                Texture2D texture = TextureAssets.Item[itemType].Value;
+                DrawEconomyCurrencyIcon(
+                    spriteBatch,
+                    dimensions,
+                    texture,
+                    itemType,
+                    EconomyCoinIconRightOffsets[index]);
+            }
+        }
+
+        private void DrawEconomyCurrencyIcon(
+            SpriteBatch spriteBatch,
+            CalculatedStyle dimensions,
+            Texture2D texture,
+            int itemType,
+            float rightOffset)
+        {
+            Rectangle sourceRectangle = GetFirstIconFrame(
+                texture,
+                itemType,
+                StatisticsIconKind.Item);
+            float scale = MathHelper.Min(
+                EconomyCoinIconSize / sourceRectangle.Width,
+                EconomyCoinIconSize / sourceRectangle.Height);
+            Vector2 iconCenter = new Vector2(
+                dimensions.X + dimensions.Width - rightOffset,
+                dimensions.Y + dimensions.Height * 0.5f);
+            spriteBatch.Draw(
+                texture,
+                iconCenter,
+                sourceRectangle,
+                economyCoinIconColor,
                 0f,
                 sourceRectangle.Size() * 0.5f,
                 scale,
@@ -303,14 +429,20 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         /// <summary>
         /// 按树层级设置统一的名称起点和剩余可用宽度。
         /// </summary>
-        private void SetNameIndent(int depth, StatisticsMetricDisplay metricDisplay)
+        private void SetNameIndent(
+            int depth,
+            StatisticsMetricDisplay metricDisplay,
+            bool reserveExpansionSlotForIcon = false)
         {
-            float left = NameLeft + depth * HierarchyIndent;
+            float left = NameLeft
+                + depth * HierarchyIndent
+                + (reserveExpansionSlotForIcon ? GroupNameAfterMarkerOffset : 0f);
             nameContainer.Left.Set(left, 0f);
             float rightReserve = metricDisplay switch
             {
                 StatisticsMetricDisplay.Mixed => MixedNameRightReserve,
                 StatisticsMetricDisplay.ItemActivity => ItemActivityNameRightReserve,
+                StatisticsMetricDisplay.EconomyTransactions => ItemActivityNameRightReserve,
                 _ => NameRightReserve
             };
             nameContainer.Width.Set(-left - rightReserve, 1f);
@@ -323,14 +455,34 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long units,
             long events,
             long amount,
-            StatisticsMetricDisplay metricDisplay)
+            StatisticsMetricDisplay metricDisplay,
+            int amountIconType,
+            Asset<Texture2D> amountIcon)
         {
+            HideEconomyCoins();
             if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
             {
                 eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
                 eventsText.SetText(units.ToString("N0"));
                 unitsText.SetText(events.ToString("N0"));
                 valueText.SetText(amount.ToString("N0"));
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.EconomyTransactions)
+            {
+                eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
+                eventsText.SetText(units.ToString("N0"));
+                unitsText.SetText(string.Empty);
+                valueText.SetText(string.Empty);
+                if (amountIconType != 0 || amountIcon != null)
+                {
+                    SetEconomySpecialCurrency(amount, amountIconType, amountIcon);
+                }
+                else
+                {
+                    SetEconomyCoins(amount);
+                }
                 return;
             }
 
@@ -348,7 +500,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 对物品页和生存页的零值单元格分别使用弱化颜色。
+        /// 对物品页、经济页和生存页的零值单元格分别使用弱化颜色。
         /// </summary>
         private void SetMetricColors(
             long units,
@@ -368,10 +520,90 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 unitsText.TextColor = events == 0L ? dimmedColor : normalColor;
                 valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
             }
+            else if (metricDisplay == StatisticsMetricDisplay.EconomyTransactions)
+            {
+                eventsText.TextColor = units == 0L ? dimmedColor : normalColor;
+                Color coinTextColor = amount == 0L ? dimmedColor : normalColor;
+                foreach (UIText coinText in economyCoinTexts)
+                {
+                    coinText.TextColor = coinTextColor;
+                }
+
+                economyCoinIconColor = amount == 0L
+                    ? new Color(dimmedColor.R, dimmedColor.G, dimmedColor.B, 180)
+                    : Color.White;
+            }
             else if (metricDisplay == StatisticsMetricDisplay.Mixed)
             {
                 eventsText.TextColor = events == 0L ? dimmedColor : normalColor;
                 valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
+            }
+        }
+
+        /// <summary>
+        /// 将铜币总额拆分到固定币种槽位，并隐藏最左侧连续的零值高位币种。
+        /// </summary>
+        private void SetEconomyCoins(long copperAmount)
+        {
+            economySpecialCurrencyItemType = 0;
+            economySpecialCurrencyIcon = null;
+            long remaining = Math.Max(0L, copperAmount);
+            economyCoinValues[0] = remaining / 1_000_000L;
+            remaining %= 1_000_000L;
+            economyCoinValues[1] = remaining / 10_000L;
+            remaining %= 10_000L;
+            economyCoinValues[2] = remaining / 100L;
+            economyCoinValues[3] = remaining % 100L;
+
+            int firstVisibleIndex = 0;
+            while (firstVisibleIndex < economyCoinValues.Length - 1
+                && economyCoinValues[firstVisibleIndex] == 0L)
+            {
+                firstVisibleIndex++;
+            }
+
+            for (int index = 0; index < economyCoinTexts.Length; index++)
+            {
+                economyCoinTexts[index].SetText(index < firstVisibleIndex
+                    ? string.Empty
+                    : economyCoinValues[index].ToString("N0"));
+                Main.instance.LoadItem(EconomyCoinItemTypes[index]);
+            }
+
+            showEconomyCoins = true;
+        }
+
+        /// <summary>
+        /// 在金额列最右侧以“数量 + 货币物品图标”显示一种特殊货币。
+        /// </summary>
+        private void SetEconomySpecialCurrency(
+            long amount,
+            int currencyItemType,
+            Asset<Texture2D> currencyIcon)
+        {
+            for (int index = 0; index < economyCoinTexts.Length - 1; index++)
+            {
+                economyCoinTexts[index].SetText(string.Empty);
+            }
+
+            economyCoinTexts[economyCoinTexts.Length - 1]
+                .SetText(Math.Max(0L, amount).ToString("N0"));
+            economySpecialCurrencyItemType = currencyItemType;
+            economySpecialCurrencyIcon = currencyIcon;
+            showEconomyCoins = true;
+        }
+
+        /// <summary>
+        /// 清除行池中上一次经济统计绑定留下的币种文字和图标状态。
+        /// </summary>
+        private void HideEconomyCoins()
+        {
+            showEconomyCoins = false;
+            economySpecialCurrencyItemType = 0;
+            economySpecialCurrencyIcon = null;
+            foreach (UIText coinText in economyCoinTexts)
+            {
+                coinText.SetText(string.Empty);
             }
         }
 

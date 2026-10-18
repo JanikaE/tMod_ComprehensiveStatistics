@@ -50,6 +50,19 @@ UI: {
 		MissingItemContent: 缺失内容：{0}
 	}
 
+	Economy: {
+		PurchasesGroup: 买入合计
+		SalesGroup: 卖出合计
+		NurseHealingGroupFormat: 护士治疗（{0:N0} 次）
+		ReforgesGroup: 哥布林重铸
+		TaxCollectorCollectionsGroup: 税收官收集
+		SpecialCurrencyPurchasesGroupFormat: 特殊货币支出（{0}）
+		TransactionUnitsColumn: 数量
+		CoinAmountColumn: 钱币支出 / 收入
+		MissingMerchantContent: 缺失商人：{0}
+		MissingCurrencyContent: 缺失货币：{0}
+	}
+
 	Movement: {
 		MovementModes: 总移动距离
 		PreviouslyUnclassified: 其他或未分类
@@ -122,6 +135,8 @@ UI: {
 		ValueColumn: 数值
 		DistanceColumn: 距离
 		NoResults: 没有符合当前条件的条目
+		CollapseAll: 全部折叠
+		ExpandAll: 全部展开
 		MetricFormat: "{0:N0} 个 / {1:N0} 次"
 		EventsFormat: "{0:N0} 次"
 		AmountFormat: "{0:N0}"

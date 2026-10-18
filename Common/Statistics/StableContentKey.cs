@@ -99,6 +99,24 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 尝试从持久化的“模组名/内容内部名”文本恢复稳定内容键。
+        /// </summary>
+        internal static bool TryParse(string value, out StableContentKey key)
+        {
+            int separatorIndex = value?.IndexOf('/') ?? -1;
+            if (separatorIndex <= 0 || separatorIndex >= value.Length - 1)
+            {
+                key = default;
+                return false;
+            }
+
+            key = new StableContentKey(
+                value.Substring(0, separatorIndex),
+                value.Substring(separatorIndex + 1));
+            return true;
+        }
+
+        /// <summary>
         /// 尝试将稳定内容键解析为当前会话中的 NPC 类型 ID。
         /// </summary>
         internal bool TryResolveNpcType(out int npcType)

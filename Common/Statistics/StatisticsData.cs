@@ -63,6 +63,27 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 从指定统计项扣除一次可逆操作，并在归零后恢复稀疏存储。
+        /// </summary>
+        internal void Subtract(StatisticKey key, StatisticMetrics delta)
+        {
+            if (delta.IsZero || !entries.TryGetValue(key, out StatisticMetrics current))
+            {
+                return;
+            }
+
+            StatisticMetrics updated = current.Subtract(delta);
+            if (updated.IsZero)
+            {
+                entries.Remove(key);
+            }
+            else
+            {
+                entries[key] = updated;
+            }
+        }
+
+        /// <summary>
         /// 获取指定统计项；未记录的键返回零值。
         /// </summary>
         internal StatisticMetrics GetValue(StatisticKey key)
@@ -142,6 +163,19 @@ namespace ComprehensiveStatistics.Common.Statistics
             // 同一玩家行为的两份归属在一个入口提交，采集器不能漏写其中一个范围。
             Career.Add(key, delta);
             GetOrCreateWorldSlice(worldId, startedAtUtc).Add(key, delta);
+        }
+
+        /// <summary>
+        /// 将可逆操作同时从角色生涯和当前世界切片扣除。
+        /// </summary>
+        internal void Subtract(
+            Guid worldId,
+            StatisticKey key,
+            StatisticMetrics delta,
+            DateTimeOffset startedAtUtc)
+        {
+            Career.Subtract(key, delta);
+            GetOrCreateWorldSlice(worldId, startedAtUtc).Subtract(key, delta);
         }
     }
 }

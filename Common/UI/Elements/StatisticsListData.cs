@@ -37,7 +37,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         Amount,
         Distance,
         Mixed,
-        ItemActivity
+        ItemActivity,
+        EconomyTransactions
     }
 
     /// <summary>
@@ -83,7 +84,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             bool nameIsLocalizationKey = false,
             StatisticsIconKind iconKind = StatisticsIconKind.Item,
             StableContentKey? content = null,
-            int? vanillaContentId = null)
+            int? vanillaContentId = null,
+            int amountIconType = 0,
+            Asset<Texture2D> amountIcon = null)
         {
             if (nameIsLocalizationKey)
             {
@@ -104,6 +107,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             Source = source;
             Content = content;
             VanillaContentId = vanillaContentId;
+            AmountIconType = amountIconType;
+            AmountIcon = amountIcon;
         }
 
         internal string Name => localizationKey != null
@@ -129,6 +134,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal StableContentKey? Content { get; }
 
         internal int? VanillaContentId { get; }
+
+        internal int AmountIconType { get; }
+
+        internal Asset<Texture2D> AmountIcon { get; }
     }
 
     /// <summary>
@@ -149,7 +158,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             bool nameIsLocalizationKey = false,
             IEnumerable<StatisticsListGroup> childGroups = null,
             StatisticsMetricDisplay? metricDisplay = null,
-            bool showChildren = true)
+            bool showChildren = true,
+            int iconType = 0,
+            Asset<Texture2D> icon = null,
+            StatisticsIconKind iconKind = StatisticsIconKind.None,
+            int amountIconType = 0,
+            Asset<Texture2D> amountIcon = null)
         {
             if (nameIsLocalizationKey)
             {
@@ -169,6 +183,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             DefaultIsExpanded = isExpanded;
             MetricDisplay = metricDisplay;
             ShowChildren = showChildren;
+            IconType = iconType;
+            Icon = icon;
+            IconKind = icon == null ? StatisticsIconKind.None : iconKind;
+            AmountIconType = amountIconType;
+            AmountIcon = amountIcon;
 
             CalculateTotals();
         }
@@ -224,5 +243,15 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal StatisticsMetricDisplay? MetricDisplay { get; }
 
         internal bool ShowChildren { get; }
+
+        internal int IconType { get; }
+
+        internal Asset<Texture2D> Icon { get; }
+
+        internal StatisticsIconKind IconKind { get; }
+
+        internal int AmountIconType { get; }
+
+        internal Asset<Texture2D> AmountIcon { get; }
     }
 }

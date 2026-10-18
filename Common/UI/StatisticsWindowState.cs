@@ -30,11 +30,13 @@ namespace ComprehensiveStatistics.Common.UI
         private const float ColumnGap = 10f;
         private const float TabGap = 4f;
         private const int ItemsTabIndex = 2;
+        private const int EconomyTabIndex = 5;
         private const int MovementTabIndex = 7;
         private const int SurvivalTabIndex = 8;
         private const float ToolbarTop = 38f;
         private const float ToolbarHeight = 28f;
         private const float ListTop = 74f;
+        private const float ExpandCollapseButtonWidth = 94f;
 
         // 顺序同时决定导航显示顺序，键名用于拼接各 Tab 的本地化路径。
         private static readonly string[] TabLocalizationKeys =
@@ -73,14 +75,17 @@ namespace ComprehensiveStatistics.Common.UI
         private UIText contentTitle;
         private UIText contentDescription;
         private UIText statisticsStartedAt;
+        private HeaderActionButton expandCollapseButton;
         private StatisticsToolbar toolbar;
         private VirtualizedStatisticsList itemList;
+        private VirtualizedStatisticsList economyList;
         private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
         private UIImageButton closeButton;
         private int selectedTabIndex;
         private Point lastViewportSize;
         private bool isItemListAttached;
+        private bool isEconomyListAttached;
         private bool isMovementListAttached;
         private bool isSurvivalListAttached;
 
@@ -92,6 +97,7 @@ namespace ComprehensiveStatistics.Common.UI
         internal void ResetTransientViewState()
         {
             itemList?.ResetTransientState();
+            economyList?.ResetTransientState();
             movementList?.ResetTransientState();
             survivalList?.ResetTransientState();
         }
@@ -155,6 +161,13 @@ namespace ComprehensiveStatistics.Common.UI
             contentPanel.BorderColor = new Color(65, 84, 150, 255);
             window.Append(contentPanel);
 
+            expandCollapseButton = new HeaderActionButton(ToggleAllGroups);
+            expandCollapseButton.Left.Set(-ExpandCollapseButtonWidth, 1f);
+            expandCollapseButton.Top.Set(0f, 0f);
+            expandCollapseButton.Width.Set(ExpandCollapseButtonWidth, 0f);
+            expandCollapseButton.Height.Set(28f, 0f);
+            contentPanel.Append(expandCollapseButton);
+
             contentTitle = new UIText(string.Empty, 1.08f);
             contentTitle.Left.Set(2f, 0f);
             contentTitle.Top.Set(2f, 0f);
@@ -163,6 +176,7 @@ namespace ComprehensiveStatistics.Common.UI
             contentDescription = new UIText(string.Empty, 0.76f);
             contentDescription.Top.Set(6f, 0f);
             contentDescription.TextColor = new Color(190, 200, 225);
+            contentDescription.DynamicallyScaleDownToWidth = true;
             contentPanel.Append(contentDescription);
 
             survivalList = new VirtualizedStatisticsList(
@@ -185,6 +199,18 @@ namespace ComprehensiveStatistics.Common.UI
             itemList.Top.Set(ListTop, 0f);
             itemList.Width.Set(0f, 1f);
             itemList.Height.Set(-ListTop, 1f);
+
+            economyList = new VirtualizedStatisticsList(
+                CreateEconomyGroups(data: null),
+                StatisticsMetricDisplay.EconomyTransactions);
+            economyList.Top.Set(ListTop, 0f);
+            economyList.Width.Set(0f, 1f);
+            economyList.Height.Set(-ListTop, 1f);
+
+            itemList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            economyList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            movementList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            survivalList.ExpansionStateChanged += UpdateExpandCollapseButton;
 
             toolbar = new StatisticsToolbar(
                 HandleScopeChanged,
@@ -245,8 +271,10 @@ namespace ComprehensiveStatistics.Common.UI
             toolbar.SetWorldPublicScopeAvailable(TabSupportsWorldPublicScope[tabIndex]);
             UpdatePageHeading();
             SetItemTotalsVisible(tabIndex == ItemsTabIndex);
+            SetEconomyTotalsVisible(tabIndex == EconomyTabIndex);
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
+            UpdateExpandCollapseButton();
             UpdateTabColors();
 
             if (changed && playSound)
@@ -368,8 +396,58 @@ namespace ComprehensiveStatistics.Common.UI
             StatisticsContentSourceFilter sourceFilter)
         {
             itemList.SetFilters(searchQuery, sourceFilter);
+            economyList.SetFilters(searchQuery, sourceFilter);
             movementList.SetFilters(searchQuery, sourceFilter);
             survivalList.SetFilters(searchQuery, sourceFilter);
+        }
+
+        /// <summary>
+        /// 对当前 Tab 的全部可展开分组执行统一展开或折叠。
+        /// </summary>
+        private void ToggleAllGroups()
+        {
+            VirtualizedStatisticsList activeList = GetActiveStatisticsList();
+            if (activeList == null || !activeList.HasExpandableGroups)
+            {
+                return;
+            }
+
+            activeList.SetAllGroupsExpanded(!activeList.HasExpandedGroups);
+        }
+
+        /// <summary>
+        /// 取得当前页面已实现的树形统计列表；占位页面返回空值。
+        /// </summary>
+        private VirtualizedStatisticsList GetActiveStatisticsList()
+        {
+            return selectedTabIndex switch
+            {
+                ItemsTabIndex => itemList,
+                EconomyTabIndex => economyList,
+                MovementTabIndex => movementList,
+                SurvivalTabIndex => survivalList,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// 根据当前可见分组的展开状态刷新页头按钮文案和可用状态。
+        /// </summary>
+        private void UpdateExpandCollapseButton()
+        {
+            if (expandCollapseButton == null)
+            {
+                return;
+            }
+
+            VirtualizedStatisticsList activeList = GetActiveStatisticsList();
+            bool enabled = activeList?.HasExpandableGroups == true;
+            bool showCollapseAction = enabled && activeList.HasExpandedGroups;
+            expandCollapseButton.SetText(Language.GetText(
+                showCollapseAction
+                    ? "Mods.ComprehensiveStatistics.UI.List.CollapseAll"
+                    : "Mods.ComprehensiveStatistics.UI.List.ExpandAll"));
+            expandCollapseButton.SetEnabled(enabled);
         }
 
         /// <summary>
@@ -385,7 +463,10 @@ namespace ComprehensiveStatistics.Common.UI
             float titleWidth = FontAssets.MouseText.Value.MeasureString(titleText).X * 1.08f;
             float descriptionLeft = titleWidth + 18f;
             contentDescription.Left.Set(descriptionLeft, 0f);
-            contentDescription.Width.Set(-descriptionLeft - 4f, 1f);
+            contentDescription.Width.Set(
+                -descriptionLeft - ExpandCollapseButtonWidth - 12f,
+                1f);
+            UpdateExpandCollapseButton();
             UpdateStatisticsStartedAt(scope);
             contentPanel.Recalculate();
         }
@@ -439,6 +520,7 @@ namespace ComprehensiveStatistics.Common.UI
             UpdateSurvivalTotals(scope);
             UpdateMovementTotals(scope);
             UpdateItemTotals(scope);
+            UpdateEconomyTotals(scope);
         }
 
         /// <summary>
@@ -462,6 +544,29 @@ namespace ComprehensiveStatistics.Common.UI
                 ? statisticsPlayer.CurrentWorldSlice
                 : statisticsPlayer.Data?.Career;
             itemList.SetGroups(CreateItemGroups(scopeData));
+        }
+
+        /// <summary>
+        /// 从当前角色范围重新生成经济页的买卖明细与护士治疗统计。
+        /// </summary>
+        private void UpdateEconomyTotals(StatisticsViewScope scope)
+        {
+            if (selectedTabIndex != EconomyTabIndex)
+            {
+                return;
+            }
+
+            if (scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                economyList.SetGroups(CreateEconomyGroups(data: null));
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            economyList.SetGroups(CreateEconomyGroups(scopeData));
         }
 
         /// <summary>
@@ -538,6 +643,509 @@ namespace ComprehensiveStatistics.Common.UI
 
             isItemListAttached = visible;
             contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 按需挂载经济统计列表，并在显示时刷新当前范围的数据。
+        /// </summary>
+        private void SetEconomyTotalsVisible(bool visible)
+        {
+            if (visible == isEconomyListAttached)
+            {
+                if (visible)
+                {
+                    UpdateEconomyTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(economyList);
+                UpdateEconomyTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                economyList.Remove();
+            }
+
+            isEconomyListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 将金币买卖、特殊货币买入及其他经济统计转换为可折叠树形表格。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateEconomyGroups(StatisticsData data)
+        {
+            Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>
+                purchasesByMerchant = new Dictionary<StableContentKey,
+                    Dictionary<StableContentKey, StatisticMetrics>>();
+            Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>
+                salesByMerchant = new Dictionary<StableContentKey,
+                    Dictionary<StableContentKey, StatisticMetrics>>();
+            Dictionary<StableContentKey,
+                Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>>
+                specialPurchasesByCurrency = new Dictionary<StableContentKey,
+                    Dictionary<StableContentKey,
+                        Dictionary<StableContentKey, StatisticMetrics>>>();
+            Dictionary<StableContentKey, StatisticMetrics> reforgesByItem =
+                new Dictionary<StableContentKey, StatisticMetrics>();
+            StatisticMetrics nurseHealingWithDebuffsRemoved = default;
+            StatisticMetrics nurseHealingWithoutDebuffsRemoved = default;
+            StatisticMetrics taxCollectorCollections = default;
+            if (data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (pair.Key == StatisticKeys.TaxCollectorCollections)
+                    {
+                        taxCollectorCollections = taxCollectorCollections.Add(pair.Value);
+                        continue;
+                    }
+
+                    if (pair.Key == StatisticKeys.NurseHealingWithDebuffsRemoved)
+                    {
+                        nurseHealingWithDebuffsRemoved =
+                            nurseHealingWithDebuffsRemoved.Add(pair.Value);
+                        continue;
+                    }
+
+                    if (pair.Key == StatisticKeys.NurseHealingWithoutDebuffsRemoved)
+                    {
+                        nurseHealingWithoutDebuffsRemoved =
+                            nurseHealingWithoutDebuffsRemoved.Add(pair.Value);
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ItemReforgeStatisticId,
+                        StringComparison.Ordinal)
+                        && pair.Key.Content.HasValue)
+                    {
+                        reforgesByItem.TryGetValue(
+                            pair.Key.Content.Value,
+                            out StatisticMetrics currentReforge);
+                        reforgesByItem[pair.Key.Content.Value] =
+                            currentReforge.Add(pair.Value);
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.SpecialCurrencyPurchaseStatisticId,
+                        StringComparison.Ordinal)
+                        && pair.Key.Content.HasValue
+                        && StatisticKeys.TryParseSpecialCurrencyPurchaseStyle(
+                            pair.Key.Style,
+                            out StableContentKey specialMerchant,
+                            out StableContentKey currencyContent))
+                    {
+                        if (!specialPurchasesByCurrency.TryGetValue(
+                            currencyContent,
+                            out Dictionary<StableContentKey,
+                                Dictionary<StableContentKey, StatisticMetrics>> merchants))
+                        {
+                            merchants = new Dictionary<StableContentKey,
+                                Dictionary<StableContentKey, StatisticMetrics>>();
+                            specialPurchasesByCurrency.Add(currencyContent, merchants);
+                        }
+
+                        if (!merchants.TryGetValue(
+                            specialMerchant,
+                            out Dictionary<StableContentKey, StatisticMetrics>
+                                specialItemMetrics))
+                        {
+                            specialItemMetrics =
+                                new Dictionary<StableContentKey, StatisticMetrics>();
+                            merchants.Add(specialMerchant, specialItemMetrics);
+                        }
+
+                        specialItemMetrics.TryGetValue(
+                            pair.Key.Content.Value,
+                            out StatisticMetrics currentSpecialPurchase);
+                        specialItemMetrics[pair.Key.Content.Value] =
+                            currentSpecialPurchase.Add(pair.Value);
+                        continue;
+                    }
+
+                    Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>
+                        target;
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ItemPurchaseStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        target = purchasesByMerchant;
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.ItemSaleStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        target = salesByMerchant;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    if (!pair.Key.Content.HasValue
+                        || !StableContentKey.TryParse(
+                            pair.Key.Style,
+                            out StableContentKey merchantContent))
+                    {
+                        continue;
+                    }
+
+                    if (!target.TryGetValue(
+                        merchantContent,
+                        out Dictionary<StableContentKey, StatisticMetrics> itemMetrics))
+                    {
+                        itemMetrics = new Dictionary<StableContentKey, StatisticMetrics>();
+                        target.Add(merchantContent, itemMetrics);
+                    }
+
+                    itemMetrics.TryGetValue(
+                        pair.Key.Content.Value,
+                        out StatisticMetrics current);
+                    itemMetrics[pair.Key.Content.Value] = current.Add(pair.Value);
+                }
+            }
+
+            List<StatisticsListGroup> groups = new List<StatisticsListGroup>
+            {
+                CreateEconomyTransactionGroup(
+                    "Mods.ComprehensiveStatistics.UI.Economy.PurchasesGroup",
+                    purchasesByMerchant)
+            };
+            groups.AddRange(new[]
+            {
+                CreateEconomyTransactionGroup(
+                    "Mods.ComprehensiveStatistics.UI.Economy.SalesGroup",
+                    salesByMerchant),
+                CreateReforgeGroup(reforgesByItem),
+                CreateNurseHealingGroup(
+                    nurseHealingWithDebuffsRemoved,
+                    nurseHealingWithoutDebuffsRemoved),
+                CreateTaxCollectionGroup(taxCollectorCollections)
+            });
+            groups.AddRange(CreateSpecialCurrencyPurchaseGroups(
+                specialPurchasesByCurrency));
+            return groups;
+        }
+
+        /// <summary>
+        /// 将不同 Debuff 处理结果合并为一行不可展开的护士治疗合计。
+        /// </summary>
+        private static StatisticsListGroup CreateNurseHealingGroup(
+            StatisticMetrics withDebuffsRemoved,
+            StatisticMetrics withoutDebuffsRemoved)
+        {
+            StatisticMetrics total = withDebuffsRemoved.Add(withoutDebuffsRemoved);
+            string name = Language.GetTextValue(
+                "Mods.ComprehensiveStatistics.UI.Economy.NurseHealingGroupFormat",
+                total.Events);
+            StatisticsListItem aggregateItem = new StatisticsListItem(
+                name,
+                itemType: 0,
+                icon: null,
+                events: total.Events,
+                units: total.Units,
+                amount: total.Amount,
+                source: StatisticsContentSource.Neutral,
+                iconKind: StatisticsIconKind.None);
+            Main.instance.LoadNPC(NPCID.Nurse);
+            return new StatisticsListGroup(
+                name,
+                new[] { aggregateItem },
+                metricDisplay: StatisticsMetricDisplay.EconomyTransactions,
+                showChildren: false,
+                iconType: NPCID.Nurse,
+                icon: TextureAssets.Npc[NPCID.Nurse],
+                iconKind: StatisticsIconKind.Npc);
+        }
+
+        /// <summary>
+        /// 创建“重铸合计 → 物品”分组；数量列显示各物品成功重铸次数。
+        /// </summary>
+        private static StatisticsListGroup CreateReforgeGroup(
+            Dictionary<StableContentKey, StatisticMetrics> metricsByItem)
+        {
+            List<StatisticsListItem> items =
+                new List<StatisticsListItem>(metricsByItem.Count);
+            foreach (KeyValuePair<StableContentKey, StatisticMetrics> reforge in metricsByItem)
+            {
+                StatisticMetrics displayMetrics = new StatisticMetrics(
+                    events: reforge.Value.Events,
+                    units: reforge.Value.Events,
+                    amount: reforge.Value.Amount);
+                items.Add(CreateEconomyTransactionItem(reforge.Key, displayMetrics));
+            }
+
+            Main.instance.LoadNPC(NPCID.GoblinTinkerer);
+            return new StatisticsListGroup(
+                "Mods.ComprehensiveStatistics.UI.Economy.ReforgesGroup",
+                items,
+                nameIsLocalizationKey: true,
+                metricDisplay: StatisticsMetricDisplay.EconomyTransactions,
+                iconType: NPCID.GoblinTinkerer,
+                icon: TextureAssets.Npc[NPCID.GoblinTinkerer],
+                iconKind: StatisticsIconKind.Npc);
+        }
+
+        /// <summary>
+        /// 创建不可展开的税收官收集合计行，数量为领取次数，金额为实际获得的钱币。
+        /// </summary>
+        private static StatisticsListGroup CreateTaxCollectionGroup(
+            StatisticMetrics collections)
+        {
+            string name = Language.GetTextValue(
+                "Mods.ComprehensiveStatistics.UI.Economy.TaxCollectorCollectionsGroup");
+            StatisticsListItem aggregateItem = new StatisticsListItem(
+                name,
+                itemType: 0,
+                icon: null,
+                events: collections.Events,
+                units: collections.Units,
+                amount: collections.Amount,
+                source: StatisticsContentSource.Neutral,
+                iconKind: StatisticsIconKind.None);
+            Main.instance.LoadNPC(NPCID.TaxCollector);
+            return new StatisticsListGroup(
+                name,
+                new[] { aggregateItem },
+                metricDisplay: StatisticsMetricDisplay.EconomyTransactions,
+                showChildren: false,
+                iconType: NPCID.TaxCollector,
+                icon: TextureAssets.Npc[NPCID.TaxCollector],
+                iconKind: StatisticsIconKind.Npc);
+        }
+
+        /// <summary>
+        /// 为每一种特殊货币创建独立的“货币 → 商人 → 物品”买入树，避免与金币合计混算。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateSpecialCurrencyPurchaseGroups(
+            Dictionary<StableContentKey,
+                Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>>
+                metricsByCurrency)
+        {
+            List<KeyValuePair<StableContentKey,
+                Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>>>
+                currencies = new List<KeyValuePair<StableContentKey,
+                    Dictionary<StableContentKey,
+                        Dictionary<StableContentKey, StatisticMetrics>>>>(metricsByCurrency);
+            currencies.Sort((left, right) => StringComparer.Ordinal.Compare(
+                left.Key.ToString(),
+                right.Key.ToString()));
+
+            List<StatisticsListGroup> groups =
+                new List<StatisticsListGroup>(currencies.Count);
+            foreach (KeyValuePair<StableContentKey,
+                Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>>
+                currency in currencies)
+            {
+                bool currencyResolved = currency.Key.TryResolveItemType(out int currencyItemType);
+                string currencyName = currencyResolved
+                    ? Lang.GetItemNameValue(currencyItemType)
+                    : Language.GetTextValue(
+                        "Mods.ComprehensiveStatistics.UI.Economy.MissingCurrencyContent",
+                        currency.Key.ToString());
+                Asset<Texture2D> currencyIcon = null;
+                if (currencyResolved)
+                {
+                    Main.instance.LoadItem(currencyItemType);
+                    currencyIcon = TextureAssets.Item[currencyItemType];
+                }
+
+                int amountIconType = currencyResolved ? currencyItemType : -1;
+                List<KeyValuePair<StableContentKey,
+                    Dictionary<StableContentKey, StatisticMetrics>>> merchants =
+                    new List<KeyValuePair<StableContentKey,
+                        Dictionary<StableContentKey, StatisticMetrics>>>(currency.Value);
+                merchants.Sort((left, right) => CompareNpcContentKeys(left.Key, right.Key));
+
+                List<StatisticsListGroup> merchantGroups =
+                    new List<StatisticsListGroup>(merchants.Count);
+                foreach (KeyValuePair<StableContentKey,
+                    Dictionary<StableContentKey, StatisticMetrics>> merchant in merchants)
+                {
+                    List<StatisticsListItem> items =
+                        new List<StatisticsListItem>(merchant.Value.Count);
+                    foreach (KeyValuePair<StableContentKey, StatisticMetrics> purchase
+                        in merchant.Value)
+                    {
+                        items.Add(CreateEconomyTransactionItem(
+                            purchase.Key,
+                            purchase.Value,
+                            amountIconType,
+                            currencyIcon));
+                    }
+
+                    bool merchantResolved = merchant.Key.TryResolveNpcType(out int npcType);
+                    string merchantName = merchantResolved
+                        ? Lang.GetNPCNameValue(npcType)
+                        : Language.GetTextValue(
+                            "Mods.ComprehensiveStatistics.UI.Economy.MissingMerchantContent",
+                            merchant.Key.ToString());
+                    Asset<Texture2D> merchantIcon = null;
+                    if (merchantResolved)
+                    {
+                        Main.instance.LoadNPC(npcType);
+                        merchantIcon = TextureAssets.Npc[npcType];
+                    }
+
+                    merchantGroups.Add(new StatisticsListGroup(
+                        merchantName,
+                        items,
+                        metricDisplay: StatisticsMetricDisplay.EconomyTransactions,
+                        iconType: merchantResolved ? npcType : 0,
+                        icon: merchantIcon,
+                        iconKind: StatisticsIconKind.Npc,
+                        amountIconType: amountIconType,
+                        amountIcon: currencyIcon));
+                }
+
+                string groupName = Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Economy.SpecialCurrencyPurchasesGroupFormat",
+                    currencyName);
+                groups.Add(new StatisticsListGroup(
+                    groupName,
+                    Array.Empty<StatisticsListItem>(),
+                    childGroups: merchantGroups,
+                    metricDisplay: StatisticsMetricDisplay.EconomyTransactions,
+                    iconType: currencyResolved ? currencyItemType : 0,
+                    icon: currencyIcon,
+                    iconKind: StatisticsIconKind.Item,
+                    amountIconType: amountIconType,
+                    amountIcon: currencyIcon));
+            }
+
+            return groups;
+        }
+
+        /// <summary>
+        /// 为一种经济交易按商人生成稳定排序的分组及物品明细。
+        /// </summary>
+        private static StatisticsListGroup CreateEconomyTransactionGroup(
+            string localizationKey,
+            Dictionary<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>
+                metricsByMerchant)
+        {
+            List<KeyValuePair<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>>
+                merchants = new List<KeyValuePair<StableContentKey,
+                    Dictionary<StableContentKey, StatisticMetrics>>>(metricsByMerchant);
+            merchants.Sort((left, right) => CompareNpcContentKeys(left.Key, right.Key));
+
+            List<StatisticsListGroup> merchantGroups =
+                new List<StatisticsListGroup>(merchants.Count);
+            foreach (KeyValuePair<StableContentKey, Dictionary<StableContentKey, StatisticMetrics>>
+                merchant in merchants)
+            {
+                List<StatisticsListItem> items =
+                    new List<StatisticsListItem>(merchant.Value.Count);
+                foreach (KeyValuePair<StableContentKey, StatisticMetrics> transaction in merchant.Value)
+                {
+                    items.Add(CreateEconomyTransactionItem(transaction.Key, transaction.Value));
+                }
+
+                bool resolved = merchant.Key.TryResolveNpcType(out int npcType);
+                string merchantName = resolved
+                    ? Lang.GetNPCNameValue(npcType)
+                    : Language.GetTextValue(
+                        "Mods.ComprehensiveStatistics.UI.Economy.MissingMerchantContent",
+                        merchant.Key.ToString());
+                Asset<Texture2D> merchantIcon = null;
+                if (resolved)
+                {
+                    Main.instance.LoadNPC(npcType);
+                    merchantIcon = TextureAssets.Npc[npcType];
+                }
+
+                merchantGroups.Add(new StatisticsListGroup(
+                    merchantName,
+                    items,
+                    metricDisplay: StatisticsMetricDisplay.EconomyTransactions,
+                    iconType: resolved ? npcType : 0,
+                    icon: merchantIcon,
+                    iconKind: StatisticsIconKind.Npc));
+            }
+
+            return new StatisticsListGroup(
+                localizationKey,
+                Array.Empty<StatisticsListItem>(),
+                nameIsLocalizationKey: true,
+                childGroups: merchantGroups,
+                metricDisplay: StatisticsMetricDisplay.EconomyTransactions);
+        }
+
+        /// <summary>
+        /// 将一项经济交易转换为带物品图标、数量、次数和金币金额的叶子项。
+        /// </summary>
+        private static StatisticsListItem CreateEconomyTransactionItem(
+            StableContentKey content,
+            StatisticMetrics metrics,
+            int amountIconType = 0,
+            Asset<Texture2D> amountIcon = null)
+        {
+            bool resolved = content.TryResolveItemType(out int itemType);
+            StatisticsContentSource source = GetContentSource(content);
+            string name = resolved
+                ? Lang.GetItemNameValue(itemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Items.MissingItemContent",
+                    content.ToString());
+            Asset<Texture2D> icon = null;
+            if (resolved)
+            {
+                Main.instance.LoadItem(itemType);
+                icon = TextureAssets.Item[itemType];
+            }
+
+            return new StatisticsListItem(
+                name,
+                itemType: resolved ? itemType : 0,
+                icon: icon,
+                events: metrics.Events,
+                units: metrics.Units,
+                amount: metrics.Amount,
+                source: source,
+                iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? itemType
+                    : null,
+                amountIconType: amountIconType,
+                amountIcon: amountIcon);
+        }
+
+        /// <summary>
+        /// 按原版 NPC 数字 ID、随后模组内容内部名的规则稳定排列商人分组。
+        /// </summary>
+        private static int CompareNpcContentKeys(StableContentKey left, StableContentKey right)
+        {
+            StatisticsContentSource leftSource = GetContentSource(left);
+            StatisticsContentSource rightSource = GetContentSource(right);
+            if (leftSource != rightSource)
+            {
+                return leftSource == StatisticsContentSource.Vanilla ? -1 : 1;
+            }
+
+            if (leftSource == StatisticsContentSource.Vanilla
+                && left.TryResolveNpcType(out int leftNpcType)
+                && right.TryResolveNpcType(out int rightNpcType))
+            {
+                return leftNpcType.CompareTo(rightNpcType);
+            }
+
+            int contentComparison = StringComparer.Ordinal.Compare(
+                left.ContentName,
+                right.ContentName);
+            return contentComparison != 0
+                ? contentComparison
+                : StringComparer.Ordinal.Compare(left.ModName, right.ModName);
         }
 
         /// <summary>
@@ -1271,6 +1879,70 @@ namespace ComprehensiveStatistics.Common.UI
             return string.Equals(content.ModName, "Terraria", StringComparison.Ordinal)
                 ? StatisticsContentSource.Vanilla
                 : StatisticsContentSource.Modded;
+        }
+
+        /// <summary>
+        /// 页标题右侧的紧凑操作按钮；占位页保持显示但不响应点击。
+        /// </summary>
+        private sealed class HeaderActionButton : UIPanel
+        {
+            private readonly Action clickAction;
+            private readonly UIText text;
+            private bool enabled;
+
+            internal HeaderActionButton(Action clickAction)
+            {
+                this.clickAction = clickAction;
+                SetPadding(3f);
+                OverflowHidden = true;
+                OnLeftClick += HandleClick;
+
+                text = new UIText(string.Empty, 0.7f);
+                text.HAlign = 0.5f;
+                text.VAlign = 0.5f;
+                Append(text);
+            }
+
+            internal void SetText(LocalizedText value)
+            {
+                text.SetText(value);
+            }
+
+            internal void SetEnabled(bool value)
+            {
+                enabled = value;
+            }
+
+            public override void Update(GameTime gameTime)
+            {
+                if (!enabled)
+                {
+                    BackgroundColor = new Color(32, 40, 72, 180);
+                    BorderColor = new Color(58, 70, 112, 180);
+                    text.TextColor = new Color(118, 129, 160);
+                }
+                else
+                {
+                    BackgroundColor = IsMouseHovering
+                        ? new Color(63, 82, 151, 245)
+                        : new Color(45, 59, 110, 235);
+                    BorderColor = new Color(75, 97, 174, 255);
+                    text.TextColor = new Color(220, 226, 244);
+                }
+
+                base.Update(gameTime);
+            }
+
+            private void HandleClick(UIMouseEvent evt, UIElement listeningElement)
+            {
+                if (!enabled)
+                {
+                    return;
+                }
+
+                clickAction();
+                SoundEngine.PlaySound(SoundID.MenuTick);
+            }
         }
 
         /// <summary>
