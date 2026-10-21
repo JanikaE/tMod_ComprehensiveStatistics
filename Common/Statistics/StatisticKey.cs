@@ -82,6 +82,9 @@ namespace ComprehensiveStatistics.Common.Statistics
     internal static class StatisticKeys
     {
         internal const string ItemPickupStatisticId = "items/pickups";
+        internal const string TileMinedStatisticId = "blocks/tiles-mined";
+        internal const string WallRemovedStatisticId = "blocks/walls-removed";
+        internal const string TileObjectRemovedStatisticId = "blocks/tile-objects-removed";
         internal const string ItemUseStatisticId = "items/uses";
         internal const string ItemDiscardStatisticId = "items/discards";
         internal const string ItemPurchaseStatisticId = "economy/purchases";
@@ -172,6 +175,32 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal const string ContinuousDamageDebuffDeathStatisticId =
             "survival/player-deaths/continuous/debuff";
+
+        /// <summary>
+        /// 获取指定实体物块对应的成功挖掘统计键。
+        /// </summary>
+        internal static StatisticKey GetMinedTileKey(StableContentKey content)
+        {
+            return new StatisticKey(TileMinedStatisticId, content);
+        }
+
+        /// <summary>
+        /// 获取指定背景墙对应的成功拆除统计键。
+        /// </summary>
+        internal static StatisticKey GetRemovedWallKey(StableContentKey content)
+        {
+            return new StatisticKey(WallRemovedStatisticId, content);
+        }
+
+        /// <summary>
+        /// 获取指定物块内容与放置样式对应的家具或多格物体拆除统计键。
+        /// </summary>
+        internal static StatisticKey GetRemovedTileObjectKey(
+            StableContentKey content,
+            string style)
+        {
+            return new StatisticKey(TileObjectRemovedStatisticId, content, style);
+        }
 
         /// <summary>
         /// 获取指定物品对应的拾取统计键。

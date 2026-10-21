@@ -13,6 +13,50 @@ UI: {
 	StatisticsStartUnavailable: Statistics start time is unavailable outside a world.
 	B2PersistenceTestCounter: B2 temporary test · World entries: {0:N0}
 
+	Blocks: {
+		SolidTilesGroup: Blocks
+		BackgroundWallsGroup: Background walls
+		MissingTileContent: Missing tile: {0}
+		MissingWallContent: Missing wall: {0}
+		MissingTileObjectContent: Missing furniture or multi-tile object: {0}
+		TileObjectStyleFormat: "{0} (style {1})"
+		NaturalWallVariantFormat: "{0} (variant {1})"
+		NaturalWallFallbackFormat: Natural background wall (type {0})
+
+		NaturalTiles: {
+			Cattail: Cattail
+			CorruptPlants: Corrupt plants
+			MushroomPlants: Mushroom plants
+			Plants2: Plants
+			SmallPiles: Small piles
+			Stalactite: Stalactite
+		}
+
+		NaturalWalls: {
+			Cavern: Cavern wall
+			Ebonstone: Natural ebonstone wall
+			Mud: Natural mud wall
+			Snow: Natural snow wall
+			Amethyst: Natural amethyst wall
+			Topaz: Natural topaz wall
+			Sapphire: Natural sapphire wall
+			Emerald: Natural emerald wall
+			Ruby: Natural ruby wall
+			Diamond: Natural diamond wall
+			CorruptGrass: Natural corrupt grass wall
+			HallowedGrass: Natural hallowed grass wall
+			Ice: Natural ice wall
+			Obsidian: Natural obsidian wall
+			CrimsonGrass: Natural crimson grass wall
+			Crimstone: Natural crimstone wall
+			Corruption: Corruption cavern wall
+			Crimson: Crimson cavern wall
+			Hallow: Hallow cavern wall
+			Lava: Lava cavern wall
+			Rocks: Rocky cavern wall
+		}
+	}
+
 	Survival: {
 		CategoryColumn: Category
 		DeathsColumn: Deaths
@@ -140,7 +184,7 @@ UI: {
 
 		Blocks: {
 			Title: Blocks
-			Description: Block, wall, furniture, and multi-tile removal statistics will appear here.
+			Description: Block mining and background wall removal statistics appear here; furniture and multi-tile objects are included under Blocks.
 		}
 
 		Items: {

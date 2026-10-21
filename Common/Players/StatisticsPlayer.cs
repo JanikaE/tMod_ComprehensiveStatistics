@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -1684,6 +1685,78 @@ namespace ComprehensiveStatistics.Common.Players
             DateTimeOffset now = DateTimeOffset.UtcNow;
             Data.Add(currentWorldId, key, delta, now);
             currentWorldSlice = Data.GetOrCreateWorldSlice(currentWorldId, now);
+        }
+
+        /// <summary>
+        /// 记录本地所属玩家成功挖掉的一个实体物块。
+        /// </summary>
+        internal void RecordMinedTile(int tileType)
+        {
+            if (!IsOwnedByLocalClient
+                || !StableContentKey.TryCreateForTileType(
+                    tileType,
+                    out StableContentKey tileContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetMinedTileKey(tileContent),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 记录本地所属玩家成功锤掉的一格背景墙。
+        /// </summary>
+        internal void RecordRemovedWall(int wallType)
+        {
+            if (!IsOwnedByLocalClient
+                || !StableContentKey.TryCreateForWallType(
+                    wallType,
+                    out StableContentKey wallContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetRemovedWallKey(wallContent),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 记录本地所属玩家完整拆除的一个家具或多格物体；样式使用固定文化格式写入存档。
+        /// </summary>
+        internal void RecordRemovedTileObject(int tileType, int style)
+        {
+            tileType = GetCanonicalTileObjectType(tileType);
+            if (!IsOwnedByLocalClient
+                || style < 0
+                || !StableContentKey.TryCreateForTileType(
+                    tileType,
+                    out StableContentKey tileContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetRemovedTileObjectKey(
+                    tileContent,
+                    style.ToString(CultureInfo.InvariantCulture)),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 将门、活板门和高门的开启状态归一到其可放置的关闭状态，避免同一物体拆成两项。
+        /// </summary>
+        private static int GetCanonicalTileObjectType(int tileType)
+        {
+            return tileType switch
+            {
+                TileID.OpenDoor => TileID.ClosedDoor,
+                TileID.TrapdoorOpen => TileID.TrapdoorClosed,
+                TileID.TallGateOpen => TileID.TallGateClosed,
+                _ => tileType
+            };
         }
 
         /// <summary>

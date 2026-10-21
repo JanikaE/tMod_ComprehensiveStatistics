@@ -142,6 +142,28 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 尝试从背景墙类型创建稳定内容键。
+        /// </summary>
+        internal static bool TryCreateForWallType(int wallType, out StableContentKey key)
+        {
+            ModWall modWall = WallLoader.GetWall(wallType);
+            if (modWall != null)
+            {
+                key = new StableContentKey(modWall.Mod.Name, modWall.Name);
+                return true;
+            }
+
+            if (WallID.Search.TryGetName(wallType, out string contentName))
+            {
+                key = new StableContentKey("Terraria", contentName);
+                return true;
+            }
+
+            key = default;
+            return false;
+        }
+
+        /// <summary>
         /// 尝试从持久化的“模组名/内容内部名”文本恢复稳定内容键。
         /// </summary>
         internal static bool TryParse(string value, out StableContentKey key)
@@ -236,6 +258,26 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
 
             tileType = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// 尝试将稳定内容键解析为当前会话中的背景墙类型 ID。
+        /// </summary>
+        internal bool TryResolveWallType(out int wallType)
+        {
+            if (string.Equals(ModName, "Terraria", StringComparison.Ordinal))
+            {
+                return WallID.Search.TryGetId(ContentName, out wallType);
+            }
+
+            if (ModContent.TryFind(ModName, ContentName, out ModWall modWall))
+            {
+                wallType = modWall.Type;
+                return true;
+            }
+
+            wallType = WallID.None;
             return false;
         }
 

@@ -13,6 +13,50 @@ UI: {
 	StatisticsStartUnavailable: 尚未进入世界，无可用的统计开始时间。
 	B2PersistenceTestCounter: B2 临时测试 · 进入世界次数：{0:N0}
 
+	Blocks: {
+		SolidTilesGroup: 物块
+		BackgroundWallsGroup: 背景墙
+		MissingTileContent: 缺失物块：{0}
+		MissingWallContent: 缺失背景墙：{0}
+		MissingTileObjectContent: 缺失家具或多格物体：{0}
+		TileObjectStyleFormat: "{0}（样式 {1}）"
+		NaturalWallVariantFormat: "{0}（变体 {1}）"
+		NaturalWallFallbackFormat: 天然背景墙（类型 {0}）
+
+		NaturalTiles: {
+			Cattail: 香蒲
+			CorruptPlants: 腐化植物
+			MushroomPlants: 蘑菇植物
+			Plants2: 植物
+			SmallPiles: 小型物堆
+			Stalactite: 钟乳石
+		}
+
+		NaturalWalls: {
+			Cavern: 洞穴墙
+			Ebonstone: 天然黑檀石墙
+			Mud: 天然泥墙
+			Snow: 天然雪墙
+			Amethyst: 天然紫晶墙
+			Topaz: 天然黄玉墙
+			Sapphire: 天然蓝玉墙
+			Emerald: 天然翡翠墙
+			Ruby: 天然红玉墙
+			Diamond: 天然钻石墙
+			CorruptGrass: 天然腐化草墙
+			HallowedGrass: 天然神圣草墙
+			Ice: 天然冰墙
+			Obsidian: 天然黑曜石墙
+			CrimsonGrass: 天然猩红草墙
+			Crimstone: 天然猩红石墙
+			Corruption: 腐化洞穴墙
+			Crimson: 猩红洞穴墙
+			Hallow: 神圣洞穴墙
+			Lava: 熔岩洞穴墙
+			Rocks: 岩石洞穴墙
+		}
+	}
+
 	Survival: {
 		CategoryColumn: 分类
 		DeathsColumn: 死亡次数
@@ -140,7 +184,7 @@ UI: {
 
 		Blocks: {
 			Title: 物块
-			Description: 这里将显示实体物块、背景墙和家具或多格物体的拆除统计。
+			Description: 这里将显示物块挖掘和背景墙拆除统计；家具与多格物体归入物块。
 		}
 
 		Items: {

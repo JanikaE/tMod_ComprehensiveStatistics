@@ -59,8 +59,44 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     {
         None,
         Item,
+        Tile,
+        Wall,
         Npc,
         Buff
+    }
+
+    /// <summary>
+    /// 描述物块图集中一个多格对象的分片布局；绘制时去掉分片间的贴图边距并无缝拼合。
+    /// </summary>
+    internal sealed class StatisticsTileIconLayout
+    {
+        internal StatisticsTileIconLayout(
+            int sourceX,
+            int sourceY,
+            int columns,
+            int coordinateWidth,
+            int coordinatePadding,
+            int[] coordinateHeights)
+        {
+            SourceX = sourceX;
+            SourceY = sourceY;
+            Columns = columns;
+            CoordinateWidth = coordinateWidth;
+            CoordinatePadding = coordinatePadding;
+            CoordinateHeights = coordinateHeights;
+        }
+
+        internal int SourceX { get; }
+
+        internal int SourceY { get; }
+
+        internal int Columns { get; }
+
+        internal int CoordinateWidth { get; }
+
+        internal int CoordinatePadding { get; }
+
+        internal int[] CoordinateHeights { get; }
     }
 
     /// <summary>
@@ -87,7 +123,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             StableContentKey? content = null,
             int? vanillaContentId = null,
             int amountIconType = 0,
-            Asset<Texture2D> amountIcon = null)
+            Asset<Texture2D> amountIcon = null,
+            StatisticsTileIconLayout tileIconLayout = null)
         {
             if (nameIsLocalizationKey)
             {
@@ -110,6 +147,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             VanillaContentId = vanillaContentId;
             AmountIconType = amountIconType;
             AmountIcon = amountIcon;
+            TileIconLayout = tileIconLayout;
         }
 
         internal string Name => localizationKey != null
@@ -139,6 +177,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal int AmountIconType { get; }
 
         internal Asset<Texture2D> AmountIcon { get; }
+
+        /// <summary>
+        /// 可选的多格物体图集布局，用于无缝拼合完整对象而非显示单个组成格。
+        /// </summary>
+        internal StatisticsTileIconLayout TileIconLayout { get; }
     }
 
     /// <summary>

@@ -55,6 +55,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private readonly long[] economyCoinValues = new long[4];
         private Action clickAction;
         private Asset<Texture2D> icon;
+        private StatisticsTileIconLayout tileIconLayout;
         private int iconType;
         private StatisticsIconKind iconKind;
         private int depth;
@@ -150,6 +151,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             markerText.TextColor = new Color(225, 232, 255);
 
             icon = groupIcon;
+            tileIconLayout = null;
             bool reserveExpansionSlotForIcon = canExpand && icon != null;
             iconOffset = IconCenter
                 + depth * HierarchyIndent
@@ -192,6 +194,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             iconType = item.ItemType;
             iconKind = item.IconKind;
             icon = item.Icon;
+            tileIconLayout = item.TileIconLayout;
             iconOffset = IconCenter + depth * HierarchyIndent;
 
             // 同一层级的分组与普通条目共用文字起点；箭头或图标只占左侧槽位。
@@ -230,6 +233,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             valueText.SetText(string.Empty);
             HideEconomyCoins();
             icon = null;
+            tileIconLayout = null;
         }
 
         public override void Update(GameTime gameTime)
@@ -304,12 +308,18 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 绘制叶子项或分组的物品、NPC、Buff 图标。
+        /// 绘制叶子项或分组的物品、物块、墙、NPC、Buff 图标。
         /// </summary>
         private void DrawContentIcon(SpriteBatch spriteBatch, CalculatedStyle dimensions)
         {
             // 只在虚拟化后的可见行访问 Value，使尚未出现过的内容贴图按需完成加载。
             Texture2D texture = icon.Value;
+            if (tileIconLayout != null)
+            {
+                DrawTileGridIcon(spriteBatch, dimensions, texture, tileIconLayout);
+                return;
+            }
+
             Rectangle sourceRectangle = GetFirstIconFrame(texture, iconType, iconKind);
             float scale = MathHelper.Min(
                 24f / sourceRectangle.Width,
@@ -328,6 +338,79 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 scale,
                 SpriteEffects.None,
                 0f);
+        }
+
+        /// <summary>
+        /// 分别绘制多格对象的每个图集分片，并在目标区域中去掉原图的分片边距。
+        /// </summary>
+        private void DrawTileGridIcon(
+            SpriteBatch spriteBatch,
+            CalculatedStyle dimensions,
+            Texture2D texture,
+            StatisticsTileIconLayout layout)
+        {
+            int rows = layout.CoordinateHeights?.Length ?? 0;
+            if (layout.Columns <= 0
+                || rows <= 0
+                || layout.CoordinateWidth <= 0)
+            {
+                return;
+            }
+
+            int contentWidth = layout.Columns * layout.CoordinateWidth;
+            int contentHeight = 0;
+            foreach (int rowHeight in layout.CoordinateHeights)
+            {
+                contentHeight += Math.Max(rowHeight, 0);
+            }
+
+            if (contentWidth <= 0 || contentHeight <= 0)
+            {
+                return;
+            }
+
+            float scale = MathHelper.Min(24f / contentWidth, 24f / contentHeight);
+            Vector2 iconCenter = new Vector2(
+                dimensions.X + iconOffset,
+                dimensions.Y + dimensions.Height * 0.5f);
+            Vector2 topLeft = iconCenter
+                - new Vector2(contentWidth, contentHeight) * scale * 0.5f;
+            int sourceY = layout.SourceY;
+            int destinationY = 0;
+            for (int row = 0; row < rows; row++)
+            {
+                int rowHeight = layout.CoordinateHeights[row];
+                for (int column = 0; column < layout.Columns; column++)
+                {
+                    Rectangle source = new Rectangle(
+                        layout.SourceX
+                            + column * (layout.CoordinateWidth + layout.CoordinatePadding),
+                        sourceY,
+                        layout.CoordinateWidth,
+                        rowHeight);
+                    if (!texture.Bounds.Contains(source))
+                    {
+                        continue;
+                    }
+
+                    Vector2 position = topLeft + new Vector2(
+                        column * layout.CoordinateWidth,
+                        destinationY) * scale;
+                    spriteBatch.Draw(
+                        texture,
+                        position,
+                        source,
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        scale,
+                        SpriteEffects.None,
+                        0f);
+                }
+
+                sourceY += rowHeight + layout.CoordinatePadding;
+                destinationY += rowHeight;
+            }
         }
 
         /// <summary>
@@ -412,6 +495,16 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     ? Math.Max(1, Main.npcFrameCount[contentType])
                     : 1;
                 return new Rectangle(0, 0, texture.Width, texture.Height / frameCount);
+            }
+
+            if (kind == StatisticsIconKind.Tile || kind == StatisticsIconKind.Wall)
+            {
+                // 物块与墙体图集都能用左上角 16 像素内容帧作为紧凑列表图标。
+                return new Rectangle(
+                    0,
+                    0,
+                    Math.Min(16, texture.Width),
+                    Math.Min(16, texture.Height));
             }
 
             // Buff 图标是单帧贴图；未知类型也安全回退为完整贴图。

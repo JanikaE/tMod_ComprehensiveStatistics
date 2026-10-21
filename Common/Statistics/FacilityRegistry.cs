@@ -250,7 +250,7 @@ namespace ComprehensiveStatistics.Common.Statistics
                 return false;
             }
 
-            int style = GetRuntimeStyle(tile);
+            int style = GetCanonicalTileStyle(tile);
             if (style < 0
                 || !runtimeDefinitions.TryGetValue(
                     new RuntimeFacilityKey(tile.TileType, style),
@@ -273,7 +273,7 @@ namespace ComprehensiveStatistics.Common.Statistics
         /// 将原版机关的开关动画帧排除在设施样式之外。
         /// TileObjectData 的通用算法会把这些状态帧解释成新样式，且墙壁开关没有可用的对象数据。
         /// </summary>
-        private static int GetRuntimeStyle(Tile tile)
+        internal static int GetCanonicalTileStyle(Tile tile)
         {
             switch (tile.TileType)
             {
@@ -288,6 +288,18 @@ namespace ComprehensiveStatistics.Common.Statistics
                 default:
                     return TileObjectData.GetTileStyle(tile);
             }
+        }
+
+        /// <summary>
+        /// 归一已经持久化的物体样式；旧版曾将单一样式机关的状态帧误存为不同样式。
+        /// </summary>
+        internal static int NormalizeTileObjectStyle(int tileType, int style)
+        {
+            return tileType switch
+            {
+                TileID.Switches or TileID.Lever or TileID.Detonator => 0,
+                _ => style
+            };
         }
 
         /// <summary>

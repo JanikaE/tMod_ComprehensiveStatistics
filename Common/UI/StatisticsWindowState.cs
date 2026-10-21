@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ComprehensiveStatistics.Common.Players;
 using ComprehensiveStatistics.Common.Systems;
 using ComprehensiveStatistics.Common.Statistics;
@@ -13,7 +14,9 @@ using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
 using Terraria.ID;
 using Terraria.Localization;
+using Terraria.Map;
 using Terraria.ModLoader;
+using Terraria.ObjectData;
 using Terraria.UI;
 
 namespace ComprehensiveStatistics.Common.UI
@@ -29,6 +32,7 @@ namespace ComprehensiveStatistics.Common.UI
         private const float HeaderHeight = 40f;
         private const float ColumnGap = 10f;
         private const float TabGap = 4f;
+        private const int BlocksTabIndex = 1;
         private const int ItemsTabIndex = 2;
         private const int InteractionsTabIndex = 3;
         private const int KillsTabIndex = 4;
@@ -80,6 +84,7 @@ namespace ComprehensiveStatistics.Common.UI
         private UIText statisticsStartedAt;
         private HeaderActionButton expandCollapseButton;
         private StatisticsToolbar toolbar;
+        private VirtualizedStatisticsList blockList;
         private VirtualizedStatisticsList itemList;
         private VirtualizedStatisticsList interactionList;
         private VirtualizedStatisticsList killList;
@@ -90,6 +95,7 @@ namespace ComprehensiveStatistics.Common.UI
         private UIImageButton closeButton;
         private int selectedTabIndex;
         private Point lastViewportSize;
+        private bool isBlockListAttached;
         private bool isItemListAttached;
         private bool isInteractionListAttached;
         private bool isKillListAttached;
@@ -105,6 +111,7 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         internal void ResetTransientViewState()
         {
+            blockList?.ResetTransientState();
             itemList?.ResetTransientState();
             interactionList?.ResetTransientState();
             killList?.ResetTransientState();
@@ -191,6 +198,13 @@ namespace ComprehensiveStatistics.Common.UI
             contentDescription.DynamicallyScaleDownToWidth = true;
             contentPanel.Append(contentDescription);
 
+            blockList = new VirtualizedStatisticsList(
+                CreateBlockGroups(data: null),
+                StatisticsMetricDisplay.Events);
+            blockList.Top.Set(ListTop, 0f);
+            blockList.Width.Set(0f, 1f);
+            blockList.Height.Set(-ListTop, 1f);
+
             survivalList = new VirtualizedStatisticsList(
                 CreateSurvivalGroups(data: null),
                 StatisticsMetricDisplay.Mixed);
@@ -240,6 +254,7 @@ namespace ComprehensiveStatistics.Common.UI
             fishingList.Width.Set(0f, 1f);
             fishingList.Height.Set(-ListTop, 1f);
 
+            blockList.ExpansionStateChanged += UpdateExpandCollapseButton;
             itemList.ExpansionStateChanged += UpdateExpandCollapseButton;
             interactionList.ExpansionStateChanged += UpdateExpandCollapseButton;
             killList.ExpansionStateChanged += UpdateExpandCollapseButton;
@@ -317,6 +332,7 @@ namespace ComprehensiveStatistics.Common.UI
             selectedTabIndex = tabIndex;
             toolbar.SetWorldPublicScopeAvailable(TabSupportsWorldPublicScope[tabIndex]);
             UpdatePageHeading();
+            SetBlockTotalsVisible(tabIndex == BlocksTabIndex);
             SetItemTotalsVisible(tabIndex == ItemsTabIndex);
             SetInteractionTotalsVisible(tabIndex == InteractionsTabIndex);
             SetKillTotalsVisible(tabIndex == KillsTabIndex);
@@ -445,6 +461,7 @@ namespace ComprehensiveStatistics.Common.UI
             string searchQuery,
             StatisticsContentSourceFilter sourceFilter)
         {
+            blockList.SetFilters(searchQuery, sourceFilter);
             itemList.SetFilters(searchQuery, sourceFilter);
             interactionList.SetFilters(searchQuery, sourceFilter);
             killList.SetFilters(searchQuery, sourceFilter);
@@ -475,6 +492,7 @@ namespace ComprehensiveStatistics.Common.UI
         {
             return selectedTabIndex switch
             {
+                BlocksTabIndex => blockList,
                 ItemsTabIndex => itemList,
                 InteractionsTabIndex => interactionList,
                 KillsTabIndex => killList,
@@ -575,6 +593,7 @@ namespace ComprehensiveStatistics.Common.UI
 
             UpdateSurvivalTotals(scope);
             UpdateMovementTotals(scope);
+            UpdateBlockTotals(scope);
             UpdateItemTotals(scope);
             UpdateInteractionTotals(scope);
             UpdateKillTotals(scope);
@@ -628,6 +647,29 @@ namespace ComprehensiveStatistics.Common.UI
                 ? statisticsPlayer.CurrentWorldSlice
                 : statisticsPlayer.Data?.Career;
             interactionList.SetGroups(CreateInteractionGroups(scopeData));
+        }
+
+        /// <summary>
+        /// 从当前角色范围重新生成物块与背景墙拆除明细。
+        /// </summary>
+        private void UpdateBlockTotals(StatisticsViewScope scope)
+        {
+            if (selectedTabIndex != BlocksTabIndex)
+            {
+                return;
+            }
+
+            if (scope == StatisticsViewScope.CurrentWorldPublic)
+            {
+                blockList.SetGroups(CreateBlockGroups(data: null));
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            blockList.SetGroups(CreateBlockGroups(scopeData));
         }
 
         /// <summary>
@@ -772,6 +814,35 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             isItemListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 按需挂载实体物块统计列表，并在显示时刷新当前范围的数据。
+        /// </summary>
+        private void SetBlockTotalsVisible(bool visible)
+        {
+            if (visible == isBlockListAttached)
+            {
+                if (visible)
+                {
+                    UpdateBlockTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(blockList);
+                UpdateBlockTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                blockList.Remove();
+            }
+
+            isBlockListAttached = visible;
             contentPanel.Recalculate();
         }
 
@@ -1744,6 +1815,679 @@ namespace ComprehensiveStatistics.Common.UI
             return contentComparison != 0
                 ? contentComparison
                 : StringComparer.Ordinal.Compare(left.ModName, right.ModName);
+        }
+
+        /// <summary>
+        /// 将物块（含家具/多格物体）和背景墙拆除记录转换为两个一级分组。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateBlockGroups(StatisticsData data)
+        {
+            List<StatisticsListItem> minedTiles = new List<StatisticsListItem>();
+            List<StatisticsListItem> removedWalls = new List<StatisticsListItem>();
+            Dictionary<StatisticKey, StatisticMetrics> normalizedTileObjects =
+                new Dictionary<StatisticKey, StatisticMetrics>();
+            if (data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (!pair.Key.Content.HasValue
+                        || pair.Value.Events <= 0L)
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.TileMinedStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        minedTiles.Add(CreateTileStatisticsItem(
+                            pair.Key.Content.Value,
+                            pair.Value.Events));
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.WallRemovedStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        removedWalls.Add(CreateWallStatisticsItem(
+                            pair.Key.Content.Value,
+                            pair.Value.Events));
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.TileObjectRemovedStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        StableContentKey content = pair.Key.Content.Value;
+                        string style = NormalizePersistedTileObjectStyle(
+                            content,
+                            pair.Key.Style);
+                        StatisticKey normalizedKey = StatisticKeys.GetRemovedTileObjectKey(
+                            content,
+                            style);
+                        normalizedTileObjects.TryGetValue(
+                            normalizedKey,
+                            out StatisticMetrics current);
+                        normalizedTileObjects[normalizedKey] = current.Add(pair.Value);
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in normalizedTileObjects)
+            {
+                // 家具和多格物体保留独立采集口径与样式键，但与普通物块显示在同一一级分组。
+                minedTiles.Add(CreateTileObjectStatisticsItem(
+                    pair.Key.Content.Value,
+                    pair.Key.Style,
+                    pair.Value.Events));
+            }
+
+            return new[]
+            {
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.SolidTilesGroup",
+                    minedTiles,
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.Events),
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.BackgroundWallsGroup",
+                    removedWalls,
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.Events)
+            };
+        }
+
+        /// <summary>
+        /// 将旧存档中误识别为样式的开关状态帧归一化，使其合并回正确的物品条目。
+        /// </summary>
+        private static string NormalizePersistedTileObjectStyle(
+            StableContentKey content,
+            string persistedStyle)
+        {
+            if (!int.TryParse(
+                    persistedStyle,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out int style)
+                || style < 0
+                || !content.TryResolveTileType(out int tileType))
+            {
+                return persistedStyle;
+            }
+
+            return FacilityRegistry.NormalizeTileObjectStyle(tileType, style)
+                .ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 按稳定物块键和样式恢复家具或多格物体名称，并优先显示对应放置/掉落物品图标。
+        /// </summary>
+        private static StatisticsListItem CreateTileObjectStatisticsItem(
+            StableContentKey content,
+            string persistedStyle,
+            long events)
+        {
+            bool resolved = content.TryResolveTileType(out int tileType);
+            bool styleResolved = int.TryParse(
+                persistedStyle,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out int style)
+                && style >= 0;
+            StatisticsContentSource source = GetContentSource(content);
+            int iconItemType = ItemID.None;
+            if (resolved && styleResolved)
+            {
+                iconItemType = FindPlacementItemForTile(tileType, style);
+                if (iconItemType <= ItemID.None)
+                {
+                    iconItemType = FindRegisteredModTileDrop(tileType, style);
+                }
+            }
+
+            string name;
+            if (iconItemType > ItemID.None)
+            {
+                name = Lang.GetItemNameValue(iconItemType);
+            }
+            else if (resolved && styleResolved)
+            {
+                string baseName = GetLocalizedTileName(content, tileType, out _);
+                name = Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.TileObjectStyleFormat",
+                    baseName,
+                    style);
+            }
+            else
+            {
+                name = Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.MissingTileObjectContent",
+                    $"{content}#{persistedStyle}");
+            }
+
+            Asset<Texture2D> icon = null;
+            StatisticsTileIconLayout tileIconLayout = null;
+            StatisticsIconKind iconKind = StatisticsIconKind.None;
+            int iconType = 0;
+            if (iconItemType > ItemID.None)
+            {
+                Main.instance.LoadItem(iconItemType);
+                icon = TextureAssets.Item[iconItemType];
+                iconKind = StatisticsIconKind.Item;
+                iconType = iconItemType;
+            }
+            else if (resolved)
+            {
+                Main.instance.LoadTiles(tileType);
+                icon = TextureAssets.Tile[tileType];
+                iconKind = StatisticsIconKind.Tile;
+                iconType = tileType;
+                tileIconLayout = GetTileObjectIconLayout(tileType, style);
+            }
+
+            return new StatisticsListItem(
+                name,
+                itemType: iconType,
+                icon: icon,
+                events: events,
+                units: 0L,
+                source: source,
+                iconKind: iconKind,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? tileType
+                    : null,
+                tileIconLayout: tileIconLayout);
+        }
+
+        /// <summary>
+        /// 计算物块图集中指定样式的完整对象区域；例如罐子应显示整张 2×2 图案而非左上角一格。
+        /// </summary>
+        private static StatisticsTileIconLayout GetTileObjectIconLayout(
+            int tileType,
+            int style)
+        {
+            if (tileType == TileID.Pots || tileType == TileID.PotsEcho)
+            {
+                // 原版罐子由特殊逻辑管理且没有对应放置物品；固定使用图集中的完整首个 2×2 罐子。
+                return new StatisticsTileIconLayout(
+                    sourceX: 0,
+                    sourceY: 0,
+                    columns: 2,
+                    coordinateWidth: 16,
+                    coordinatePadding: 2,
+                    coordinateHeights: new[] { 16, 16 });
+            }
+
+            TileObjectData data = TileObjectData.GetTileData(tileType, style);
+            if (data == null
+                || data.Width <= 0
+                || data.Height <= 0
+                || data.CoordinateWidth <= 0
+                || data.CoordinateHeights == null
+                || data.CoordinateHeights.Length < data.Height
+                || data.CoordinateFullWidth <= 0
+                || data.CoordinateFullHeight <= 0)
+            {
+                return null;
+            }
+
+            int placementStyle = data.CalculatePlacementStyle(style, alternate: 0, random: 0);
+            int styleOffset = Math.Max(placementStyle, 0);
+            int column = data.StyleHorizontal ? styleOffset : 0;
+            int row = data.StyleHorizontal ? 0 : styleOffset;
+            if (data.StyleWrapLimit > 0)
+            {
+                if (data.StyleHorizontal)
+                {
+                    column = styleOffset % data.StyleWrapLimit;
+                    row = styleOffset / data.StyleWrapLimit;
+                }
+                else
+                {
+                    row = styleOffset % data.StyleWrapLimit;
+                    column = styleOffset / data.StyleWrapLimit;
+                }
+            }
+
+            int lineSkip = Math.Max(data.StyleLineSkip, 1);
+            int x = column * data.CoordinateFullWidth
+                * (data.StyleHorizontal ? 1 : lineSkip);
+            int y = row * data.CoordinateFullHeight
+                * (data.StyleHorizontal ? lineSkip : 1);
+            int[] coordinateHeights = new int[data.Height];
+            Array.Copy(data.CoordinateHeights, coordinateHeights, data.Height);
+            return new StatisticsTileIconLayout(
+                x,
+                y,
+                data.Width,
+                data.CoordinateWidth,
+                data.CoordinatePadding,
+                coordinateHeights);
+        }
+
+        /// <summary>
+        /// 将稳定物块键解析为本地化名称，并优先使用对应物品图标；缺失内容仍保留可读占位。
+        /// </summary>
+        private static StatisticsListItem CreateTileStatisticsItem(
+            StableContentKey content,
+            long events)
+        {
+            bool resolved = content.TryResolveTileType(out int tileType);
+            StatisticsContentSource source = GetContentSource(content);
+            int iconItemType = ItemID.None;
+            string name = resolved
+                ? GetLocalizedTileName(content, tileType, out iconItemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.MissingTileContent",
+                    content.ToString());
+
+            Asset<Texture2D> icon = null;
+            StatisticsTileIconLayout tileIconLayout = null;
+            StatisticsIconKind iconKind = StatisticsIconKind.None;
+            int iconType = 0;
+            if (iconItemType > ItemID.None)
+            {
+                Main.instance.LoadItem(iconItemType);
+                icon = TextureAssets.Item[iconItemType];
+                iconKind = StatisticsIconKind.Item;
+                iconType = iconItemType;
+            }
+            else if (resolved)
+            {
+                Main.instance.LoadTiles(tileType);
+                icon = TextureAssets.Tile[tileType];
+                iconKind = StatisticsIconKind.Tile;
+                iconType = tileType;
+                tileIconLayout = GetTileObjectIconLayout(tileType, style: 0);
+            }
+
+            return new StatisticsListItem(
+                name,
+                itemType: iconType,
+                icon: icon,
+                events: events,
+                units: 0L,
+                source: source,
+                iconKind: iconKind,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? tileType
+                    : null,
+                tileIconLayout: tileIconLayout);
+        }
+
+        /// <summary>
+        /// 获取物块的当前语言名称，避免原版地图图例缺少翻译时直接显示内部英文名。
+        /// </summary>
+        private static string GetLocalizedTileName(
+            StableContentKey content,
+            int tileType,
+            out int iconItemType)
+        {
+            iconItemType = FindPlacementItemForTile(tileType, style: 0);
+            if (iconItemType <= ItemID.None)
+            {
+                iconItemType = FindRegisteredModTileDrop(tileType, style: 0);
+            }
+
+            string explicitMapKey = $"MapObject.{content.ContentName}";
+            if (Language.Exists(explicitMapKey))
+            {
+                string explicitMapName = Language.GetTextValue(explicitMapKey);
+                if (!string.IsNullOrWhiteSpace(explicitMapName)
+                    && !string.Equals(
+                        explicitMapName,
+                        content.ContentName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return explicitMapName;
+                }
+            }
+
+            string mapName = Lang.GetMapObjectName(MapHelper.TileToLookup(tileType, 0));
+            if (!string.IsNullOrWhiteSpace(mapName)
+                && !string.Equals(
+                    mapName,
+                    content.ContentName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return mapName;
+            }
+
+            string naturalTileLocalizationKey = GetNaturalTileLocalizationKey(content);
+            if (naturalTileLocalizationKey != null)
+            {
+                return Language.GetTextValue(naturalTileLocalizationKey);
+            }
+
+            if (iconItemType > ItemID.None)
+            {
+                string itemName = Lang.GetItemNameValue(iconItemType);
+                if (!string.IsNullOrWhiteSpace(itemName))
+                {
+                    return itemName;
+                }
+            }
+
+            return !string.IsNullOrWhiteSpace(mapName)
+                ? mapName
+                : content.ContentName;
+        }
+
+        /// <summary>
+        /// 为原版地图图例仍返回内部名、且没有对应放置物品的自然装饰物提供本地化兜底。
+        /// </summary>
+        private static string GetNaturalTileLocalizationKey(StableContentKey content)
+        {
+            if (!string.Equals(content.ModName, "Terraria", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string key = content.ContentName switch
+            {
+                "Cattail" => "Cattail",
+                "CorruptPlants" => "CorruptPlants",
+                "MushroomPlants" => "MushroomPlants",
+                "Plants2" => "Plants2",
+                "SmallPiles" => "SmallPiles",
+                "Stalactite" => "Stalactite",
+                _ => null
+            };
+            return key == null
+                ? null
+                : $"Mods.ComprehensiveStatistics.UI.Blocks.NaturalTiles.{key}";
+        }
+
+        /// <summary>
+        /// 查找能以指定样式放置物块的物品，并以最小类型 ID 保证结果稳定。
+        /// </summary>
+        private static int FindPlacementItemForTile(int tileType, int style)
+        {
+            int result = ItemID.None;
+            foreach (KeyValuePair<int, Item> pair in ContentSamples.ItemsByType)
+            {
+                Item item = pair.Value;
+                if (item == null
+                    || item.IsAir
+                    || item.createTile != tileType
+                    || item.placeStyle != style
+                    || (result > ItemID.None && pair.Key >= result))
+                {
+                    continue;
+                }
+
+                result = pair.Key;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 只对模组物块使用注册掉落作为图标；该 API 对原版物块不可靠，数字 ID 可能错误碰撞。
+        /// </summary>
+        private static int FindRegisteredModTileDrop(int tileType, int style)
+        {
+            return TileLoader.GetTile(tileType) != null
+                ? TileLoader.GetItemDropFromTypeAndStyle(tileType, style)
+                : ItemID.None;
+        }
+
+        /// <summary>
+        /// 将稳定背景墙键解析为本地化物品名称和墙体贴图。
+        /// </summary>
+        private static StatisticsListItem CreateWallStatisticsItem(
+            StableContentKey content,
+            long events)
+        {
+            bool resolved = content.TryResolveWallType(out int wallType);
+            StatisticsContentSource source = GetContentSource(content);
+            int iconItemType = ItemID.None;
+            string name = resolved
+                ? GetLocalizedWallName(content, wallType, out iconItemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.MissingWallContent",
+                    content.ToString());
+
+            Asset<Texture2D> icon = null;
+            StatisticsIconKind iconKind = StatisticsIconKind.None;
+            int iconType = 0;
+            if (iconItemType > ItemID.None)
+            {
+                Main.instance.LoadItem(iconItemType);
+                icon = TextureAssets.Item[iconItemType];
+                iconKind = StatisticsIconKind.Item;
+                iconType = iconItemType;
+            }
+            else if (resolved)
+            {
+                Main.instance.LoadWall(wallType);
+                icon = TextureAssets.Wall[wallType];
+                iconKind = StatisticsIconKind.Wall;
+                iconType = wallType;
+            }
+
+            return new StatisticsListItem(
+                name,
+                itemType: iconType,
+                icon: icon,
+                events: events,
+                units: 0L,
+                source: source,
+                iconKind: iconKind,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? wallType
+                    : null);
+        }
+
+        /// <summary>
+        /// 查找能放置指定背景墙的物品，并以最小类型 ID 保证结果稳定。
+        /// </summary>
+        private static int FindPlacementItemForWall(int wallType)
+        {
+            int result = ItemID.None;
+            foreach (KeyValuePair<int, Item> pair in ContentSamples.ItemsByType)
+            {
+                Item item = pair.Value;
+                if (item == null
+                    || item.IsAir
+                    || item.createWall != wallType
+                    || (result > ItemID.None && pair.Key >= result))
+                {
+                    continue;
+                }
+
+                result = pair.Key;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 获取背景墙的当前语言名称，并为天然墙选择辨识度更高的代表物品图标。
+        /// </summary>
+        private static string GetLocalizedWallName(
+            StableContentKey content,
+            int wallType,
+            out int iconItemType)
+        {
+            iconItemType = FindPlacementItemForWall(wallType);
+            if (iconItemType > ItemID.None)
+            {
+                return Lang.GetItemNameValue(iconItemType);
+            }
+
+            if (!string.Equals(content.ModName, "Terraria", StringComparison.Ordinal))
+            {
+                return content.ContentName;
+            }
+
+            string naturalKind = NormalizeNaturalWallName(
+                content.ContentName,
+                out int variant);
+            if (TryFindRepresentativeWallItem(naturalKind, out iconItemType))
+            {
+                string representativeName = Lang.GetItemNameValue(iconItemType);
+                return variant > 0
+                    ? Language.GetTextValue(
+                        "Mods.ComprehensiveStatistics.UI.Blocks.NaturalWallVariantFormat",
+                        representativeName,
+                        variant)
+                    : representativeName;
+            }
+
+            string localizationKey = GetNaturalWallLocalizationKey(
+                naturalKind,
+                out string representativeWallName);
+            if (TryFindRepresentativeWallItem(representativeWallName, out int representativeItem))
+            {
+                iconItemType = representativeItem;
+            }
+
+            string localizedName = localizationKey != null
+                ? Language.GetTextValue(localizationKey)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.NaturalWallFallbackFormat",
+                    wallType);
+            return variant > 0
+                ? Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.NaturalWallVariantFormat",
+                    localizedName,
+                    variant)
+                : localizedName;
+        }
+
+        /// <summary>
+        /// 去掉天然墙内部名中的 Unsafe/Echo 标记并提取两侧的数字变体。
+        /// </summary>
+        private static string NormalizeNaturalWallName(string contentName, out int variant)
+        {
+            variant = 0;
+            string normalized = contentName ?? string.Empty;
+            int markerIndex = normalized.IndexOf("Unsafe", StringComparison.Ordinal);
+            if (markerIndex >= 0)
+            {
+                string suffix = normalized.Substring(markerIndex + "Unsafe".Length);
+                normalized = normalized.Substring(0, markerIndex);
+                TryParsePositiveNumber(suffix, out variant);
+            }
+            else
+            {
+                markerIndex = normalized.IndexOf("Echo", StringComparison.Ordinal);
+                if (markerIndex >= 0)
+                {
+                    normalized = normalized.Substring(0, markerIndex);
+                }
+            }
+
+            int digitStart = normalized.Length;
+            while (digitStart > 0 && char.IsDigit(normalized[digitStart - 1]))
+            {
+                digitStart--;
+            }
+
+            if (digitStart < normalized.Length)
+            {
+                if (variant == 0)
+                {
+                    TryParsePositiveNumber(normalized.Substring(digitStart), out variant);
+                }
+
+                normalized = normalized.Substring(0, digitStart);
+            }
+
+            if (string.Equals(normalized, "CaveWall", StringComparison.Ordinal))
+            {
+                normalized = "Cave";
+            }
+            else if (string.Equals(normalized, "MudWall", StringComparison.Ordinal))
+            {
+                normalized = "Mud";
+            }
+
+            return normalized;
+        }
+
+        /// <summary>
+        /// 安全解析正整数变体编号；失败时保持零值。
+        /// </summary>
+        private static bool TryParsePositiveNumber(string value, out int number)
+        {
+            return int.TryParse(value, out number) && number > 0;
+        }
+
+        /// <summary>
+        /// 尝试通过规范化后的安全墙类型找到可放置物品，作为名称和图标来源。
+        /// </summary>
+        private static bool TryFindRepresentativeWallItem(
+            string wallContentName,
+            out int itemType)
+        {
+            itemType = ItemID.None;
+            return !string.IsNullOrEmpty(wallContentName)
+                && WallID.Search.TryGetId(wallContentName, out int wallType)
+                && (itemType = FindPlacementItemForWall(wallType)) > ItemID.None;
+        }
+
+        /// <summary>
+        /// 将没有安全墙对应物品的原版天然墙归入本地化类别，并指定代表墙图标。
+        /// </summary>
+        private static string GetNaturalWallLocalizationKey(
+            string naturalKind,
+            out string representativeWallName)
+        {
+            string key = naturalKind switch
+            {
+                "Cave" => "Cavern",
+                "Ebonstone" => "Ebonstone",
+                "Mud" => "Mud",
+                "SnowWall" => "Snow",
+                "Amethyst" => "Amethyst",
+                "Topaz" => "Topaz",
+                "Sapphire" => "Sapphire",
+                "Emerald" => "Emerald",
+                "Ruby" => "Ruby",
+                "Diamond" => "Diamond",
+                "CorruptGrass" => "CorruptGrass",
+                "HallowedGrass" => "HallowedGrass",
+                "Ice" => "Ice",
+                "ObsidianBack" => "Obsidian",
+                "CrimsonGrass" => "CrimsonGrass",
+                "Crimstone" => "Crimstone",
+                "Corruption" => "Corruption",
+                "Crimson" => "Crimson",
+                "Hallow" => "Hallow",
+                "Pearlstone" => "Hallow",
+                "Lava" => "Lava",
+                "Rocks" => "Rocks",
+                _ => null
+            };
+            representativeWallName = naturalKind switch
+            {
+                "Cave" or "Rocks" => "Stone",
+                "Ebonstone" or "CorruptGrass" or "Corruption" => "EbonstoneBrick",
+                "Mud" => "Dirt",
+                "SnowWall" => "SnowBrick",
+                "Ice" => "IceBrick",
+                "ObsidianBack" => "ObsidianBrick",
+                "CrimsonGrass" or "Crimstone" or "Crimson" => "CrimstoneBrick",
+                "HallowedGrass" or "Hallow" => "PearlstoneBrick",
+                "Lava" => "HellstoneBrick",
+                "Amethyst" => "AmethystGemspark",
+                "Topaz" => "TopazGemspark",
+                "Sapphire" => "SapphireGemspark",
+                "Emerald" => "EmeraldGemspark",
+                "Ruby" => "RubyGemspark",
+                "Diamond" => "DiamondGemspark",
+                "Pearlstone" => "PearlstoneBrick",
+                _ => string.Empty
+            };
+            return key == null
+                ? null
+                : $"Mods.ComprehensiveStatistics.UI.Blocks.NaturalWalls.{key}";
         }
 
         /// <summary>
