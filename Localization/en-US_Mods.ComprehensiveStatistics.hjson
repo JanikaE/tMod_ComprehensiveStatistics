@@ -125,9 +125,10 @@ UI: {
 	}
 
 	Kills: {
-		FinalKillsGroup: Final kills
-		AssistsGroup: Assists
-		WorldDeathsGroup: World deaths
+		CombinedGroup: NPC kills and deaths
+		FinalKillsColumn: Final kills
+		AssistsColumn: Assists
+		WorldDeathsColumn: World deaths
 		MissingNpcContent: Missing content: {0}
 	}
 
@@ -242,10 +243,8 @@ UI: {
 		SearchHint: Search names…
 		ScopeCareer: Character career
 		ScopeCurrentWorld: Character in world
-		ScopeWorldPublic: World public
 		ScopeCareerDescription: Scope: this character's full career.
 		ScopeCurrentWorldDescription: Scope: this character in the current world.
-		ScopeWorldPublicDescription: Scope: public data for the current world.
 		ScopedTitleFormat: "{0} · {1}"
 		ScopedDescriptionFormat: "{0} {1}"
 		SourceAll: All sources

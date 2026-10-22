@@ -39,6 +39,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         Distance,
         Mixed,
         ItemActivity,
+        KillOutcomes,
         EconomyTransactions
     }
 

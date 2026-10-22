@@ -59,20 +59,6 @@ namespace ComprehensiveStatistics.Common.UI
             "Survival"
         };
 
-        // 第一版只有概览和击杀页会展示世界公共统计；其余页面记录的都是角色行为。
-        private static readonly bool[] TabSupportsWorldPublicScope =
-        {
-            true,
-            false,
-            false,
-            false,
-            true,
-            false,
-            false,
-            false,
-            false
-        };
-
         private readonly List<UIPanel> tabButtons = new List<UIPanel>(TabCount);
 
         private UIPanel window;
@@ -234,8 +220,8 @@ namespace ComprehensiveStatistics.Common.UI
             interactionList.Height.Set(-ListTop, 1f);
 
             killList = new VirtualizedStatisticsList(
-                CreateKillGroups(data: null, worldPublic: false),
-                StatisticsMetricDisplay.Events);
+                CreateKillGroups(characterData: null, worldData: null),
+                StatisticsMetricDisplay.KillOutcomes);
             killList.Top.Set(ListTop, 0f);
             killList.Width.Set(0f, 1f);
             killList.Height.Set(-ListTop, 1f);
@@ -308,18 +294,18 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 当服务器同步世界统计增量时，刷新当前可见的世界公共页面。
+        /// 当服务器同步世界统计增量时，刷新击杀页的世界实际死亡列。
         /// </summary>
         internal void RefreshWorldPublicData()
         {
-            if (toolbar?.Scope == StatisticsViewScope.CurrentWorldPublic)
+            if (selectedTabIndex == KillsTabIndex && toolbar != null)
             {
-                UpdateStatisticsStartedAt(StatisticsViewScope.CurrentWorldPublic);
+                UpdateKillTotals(toolbar.Scope);
             }
         }
 
         /// <summary>
-        /// 选择有效页面，并同步范围能力、内容挂载和选中外观。
+        /// 选择有效页面，并同步内容挂载和选中外观。
         /// </summary>
         private void SelectTab(int tabIndex, bool playSound = true)
         {
@@ -330,7 +316,6 @@ namespace ComprehensiveStatistics.Common.UI
 
             bool changed = selectedTabIndex != tabIndex;
             selectedTabIndex = tabIndex;
-            toolbar.SetWorldPublicScopeAvailable(TabSupportsWorldPublicScope[tabIndex]);
             UpdatePageHeading();
             SetBlockTotalsVisible(tabIndex == BlocksTabIndex);
             SetItemTotalsVisible(tabIndex == ItemsTabIndex);
@@ -566,17 +551,10 @@ namespace ComprehensiveStatistics.Common.UI
 
             if (!Main.gameMenu && Main.LocalPlayer?.active == true)
             {
-                if (scope == StatisticsViewScope.CurrentWorldPublic)
-                {
-                    startedAtUtc = ModContent.GetInstance<StatisticsWorldSystem>().Data?.StartedAtUtc;
-                }
-                else
-                {
-                    StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-                    startedAtUtc = scope == StatisticsViewScope.CharacterCurrentWorld
-                        ? statisticsPlayer.CurrentWorldSlice?.StartedAtUtc
-                        : statisticsPlayer.Data?.Career.StartedAtUtc;
-                }
+                StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+                startedAtUtc = scope == StatisticsViewScope.CharacterCurrentWorld
+                    ? statisticsPlayer.CurrentWorldSlice?.StartedAtUtc
+                    : statisticsPlayer.Data?.Career.StartedAtUtc;
             }
 
             if (startedAtUtc.HasValue)
@@ -602,7 +580,7 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 从当前角色范围重新生成最终击杀与协助击杀明细，或显示世界实际死亡。
+        /// 合并当前角色范围的击杀数据与当前世界实际死亡，生成三列 NPC 明细。
         /// </summary>
         private void UpdateKillTotals(StatisticsViewScope scope)
         {
@@ -611,19 +589,12 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                StatisticsData worldData =
-                    ModContent.GetInstance<StatisticsWorldSystem>().Data;
-                killList.SetGroups(CreateKillGroups(worldData, worldPublic: true));
-                return;
-            }
-
             StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+            StatisticsData characterData = scope == StatisticsViewScope.CharacterCurrentWorld
                 ? statisticsPlayer.CurrentWorldSlice
                 : statisticsPlayer.Data?.Career;
-            killList.SetGroups(CreateKillGroups(scopeData, worldPublic: false));
+            StatisticsData worldData = ModContent.GetInstance<StatisticsWorldSystem>().Data;
+            killList.SetGroups(CreateKillGroups(characterData, worldData));
         }
 
         /// <summary>
@@ -633,12 +604,6 @@ namespace ComprehensiveStatistics.Common.UI
         {
             if (selectedTabIndex != InteractionsTabIndex)
             {
-                return;
-            }
-
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                interactionList.SetGroups(CreateInteractionGroups(data: null));
                 return;
             }
 
@@ -659,12 +624,6 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                blockList.SetGroups(CreateBlockGroups(data: null));
-                return;
-            }
-
             StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
             StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
                 ? statisticsPlayer.CurrentWorldSlice
@@ -679,12 +638,6 @@ namespace ComprehensiveStatistics.Common.UI
         {
             if (selectedTabIndex != ItemsTabIndex)
             {
-                return;
-            }
-
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                itemList.SetGroups(CreateItemGroups(data: null));
                 return;
             }
 
@@ -705,12 +658,6 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                economyList.SetGroups(CreateEconomyGroups(data: null));
-                return;
-            }
-
             StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
             StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
                 ? statisticsPlayer.CurrentWorldSlice
@@ -725,12 +672,6 @@ namespace ComprehensiveStatistics.Common.UI
         {
             if (selectedTabIndex != FishingTabIndex)
             {
-                return;
-            }
-
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                fishingList.SetGroups(CreateFishingGroups(data: null));
                 return;
             }
 
@@ -751,12 +692,6 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                movementList.SetGroups(CreateMovementGroups(data: null));
-                return;
-            }
-
             StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
             StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
                 ? statisticsPlayer.CurrentWorldSlice
@@ -771,12 +706,6 @@ namespace ComprehensiveStatistics.Common.UI
         {
             if (selectedTabIndex != SurvivalTabIndex)
             {
-                return;
-            }
-
-            if (scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                survivalList.SetGroups(CreateSurvivalGroups(data: null));
                 return;
             }
 
@@ -1020,11 +949,11 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 将角色击杀/协助或世界实际死亡转换为对应范围的树形明细。
+        /// 按 NPC 合并角色最终击杀、协助击杀与当前世界实际死亡三列数据。
         /// </summary>
         private static IEnumerable<StatisticsListGroup> CreateKillGroups(
-            StatisticsData data,
-            bool worldPublic)
+            StatisticsData characterData,
+            StatisticsData worldData)
         {
             Dictionary<StableContentKey, long> finalKillsByNpc =
                 new Dictionary<StableContentKey, long>();
@@ -1032,9 +961,9 @@ namespace ComprehensiveStatistics.Common.UI
                 new Dictionary<StableContentKey, long>();
             Dictionary<StableContentKey, long> worldDeathsByNpc =
                 new Dictionary<StableContentKey, long>();
-            if (data != null)
+            if (characterData != null)
             {
-                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in characterData.Entries)
                 {
                     if (!pair.Key.Content.HasValue || pair.Value.Events <= 0L)
                     {
@@ -1058,41 +987,58 @@ namespace ComprehensiveStatistics.Common.UI
                         assistsByNpc.TryGetValue(content, out long current);
                         assistsByNpc[content] = SaturatingAdd(current, pair.Value.Events);
                     }
-                    else if (string.Equals(
-                        pair.Key.StatisticId,
-                        StatisticKeys.NpcWorldDeathStatisticId,
-                        StringComparison.Ordinal))
-                    {
-                        worldDeathsByNpc.TryGetValue(content, out long current);
-                        worldDeathsByNpc[content] = SaturatingAdd(current, pair.Value.Events);
-                    }
                 }
             }
 
-            if (worldPublic)
+            if (worldData != null)
             {
-                return new[]
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in worldData.Entries)
                 {
-                    new StatisticsListGroup(
-                        "Mods.ComprehensiveStatistics.UI.Kills.WorldDeathsGroup",
-                        CreateNpcStatisticsItems(worldDeathsByNpc),
-                        nameIsLocalizationKey: true,
-                        metricDisplay: StatisticsMetricDisplay.Events)
-                };
+                    if (!pair.Key.Content.HasValue
+                        || pair.Value.Events <= 0L
+                        || !string.Equals(
+                            pair.Key.StatisticId,
+                            StatisticKeys.NpcWorldDeathStatisticId,
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    StableContentKey content = pair.Key.Content.Value;
+                    worldDeathsByNpc.TryGetValue(content, out long current);
+                    worldDeathsByNpc[content] = SaturatingAdd(current, pair.Value.Events);
+                }
+            }
+
+            HashSet<StableContentKey> npcContents =
+                new HashSet<StableContentKey>(finalKillsByNpc.Keys);
+            npcContents.UnionWith(assistsByNpc.Keys);
+            npcContents.UnionWith(worldDeathsByNpc.Keys);
+            List<StableContentKey> orderedNpcContents =
+                new List<StableContentKey>(npcContents);
+            orderedNpcContents.Sort(CompareNpcContentKeys);
+
+            List<StatisticsListItem> items =
+                new List<StatisticsListItem>(orderedNpcContents.Count);
+            foreach (StableContentKey content in orderedNpcContents)
+            {
+                finalKillsByNpc.TryGetValue(content, out long finalKills);
+                assistsByNpc.TryGetValue(content, out long assists);
+                worldDeathsByNpc.TryGetValue(content, out long worldDeaths);
+                items.Add(CreateNpcStatisticsItem(
+                    content,
+                    finalKills,
+                    units: assists,
+                    amount: worldDeaths));
             }
 
             return new[]
             {
                 new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.Kills.FinalKillsGroup",
-                    CreateNpcStatisticsItems(finalKillsByNpc),
+                    "Mods.ComprehensiveStatistics.UI.Kills.CombinedGroup",
+                    items,
                     nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.Events),
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.Kills.AssistsGroup",
-                    CreateNpcStatisticsItems(assistsByNpc),
-                    nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.Events)
+                    metricDisplay: StatisticsMetricDisplay.KillOutcomes)
             };
         }
 
@@ -1183,19 +1129,20 @@ namespace ComprehensiveStatistics.Common.UI
                 items.Add(CreateNpcStatisticsItem(
                     content,
                     eventsByNpc[content],
-                    mirrorEventsToUnits));
+                    units: mirrorEventsToUnits ? eventsByNpc[content] : 0L));
             }
 
             return items;
         }
 
         /// <summary>
-        /// 将 NPC 稳定内容键转换为带 NPC 首帧图标的统计叶子项。
+        /// 将 NPC 稳定内容键和最多三项指标转换为带 NPC 首帧图标的统计叶子项。
         /// </summary>
         private static StatisticsListItem CreateNpcStatisticsItem(
             StableContentKey content,
             long events,
-            bool mirrorEventsToUnits = false)
+            long units = 0L,
+            long amount = 0L)
         {
             bool resolved = content.TryResolveNpcType(out int npcType);
             StatisticsContentSource source = GetContentSource(content);
@@ -1216,7 +1163,8 @@ namespace ComprehensiveStatistics.Common.UI
                 itemType: resolved ? npcType : 0,
                 icon: icon,
                 events: events,
-                units: mirrorEventsToUnits ? events : 0L,
+                units: units,
+                amount: amount,
                 source: source,
                 iconKind: resolved ? StatisticsIconKind.Npc : StatisticsIconKind.None,
                 content: content,

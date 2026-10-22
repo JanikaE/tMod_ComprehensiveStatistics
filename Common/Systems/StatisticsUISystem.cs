@@ -105,7 +105,7 @@ namespace ComprehensiveStatistics.Common.Systems
         }
 
         /// <summary>
-        /// 在窗口正查看世界公共范围时刷新服务器同步的数据。
+        /// 在窗口正显示击杀页时刷新服务器同步的世界实际死亡列。
         /// </summary>
         internal void RefreshWorldPublicData()
         {

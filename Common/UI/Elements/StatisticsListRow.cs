@@ -535,6 +535,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 StatisticsMetricDisplay.Mixed => MixedNameRightReserve,
                 StatisticsMetricDisplay.ItemActivity => ItemActivityNameRightReserve,
+                StatisticsMetricDisplay.KillOutcomes => ItemActivityNameRightReserve,
                 StatisticsMetricDisplay.EconomyTransactions => ItemActivityNameRightReserve,
                 _ => NameRightReserve
             };
@@ -558,6 +559,15 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
                 eventsText.SetText(units.ToString("N0"));
                 unitsText.SetText(events.ToString("N0"));
+                valueText.SetText(amount.ToString("N0"));
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.KillOutcomes)
+            {
+                eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
+                eventsText.SetText(events.ToString("N0"));
+                unitsText.SetText(units.ToString("N0"));
                 valueText.SetText(amount.ToString("N0"));
                 return;
             }
@@ -593,7 +603,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 对物品页、经济页和生存页的零值单元格分别使用弱化颜色。
+        /// 对物品页、击杀页、经济页和生存页的零值单元格分别使用弱化颜色。
         /// </summary>
         private void SetMetricColors(
             long units,
@@ -611,6 +621,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 eventsText.TextColor = units == 0L ? dimmedColor : normalColor;
                 unitsText.TextColor = events == 0L ? dimmedColor : normalColor;
+                valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
+            }
+            else if (metricDisplay == StatisticsMetricDisplay.KillOutcomes)
+            {
+                eventsText.TextColor = events == 0L ? dimmedColor : normalColor;
+                unitsText.TextColor = units == 0L ? dimmedColor : normalColor;
                 valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
             }
             else if (metricDisplay == StatisticsMetricDisplay.EconomyTransactions)

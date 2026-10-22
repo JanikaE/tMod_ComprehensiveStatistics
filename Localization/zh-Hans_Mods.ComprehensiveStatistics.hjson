@@ -125,9 +125,10 @@ UI: {
 	}
 
 	Kills: {
-		FinalKillsGroup: 最终击杀
-		AssistsGroup: 协助击杀
-		WorldDeathsGroup: 世界实际死亡
+		CombinedGroup: NPC 击杀与死亡
+		FinalKillsColumn: 最终击杀
+		AssistsColumn: 协助击杀
+		WorldDeathsColumn: 世界实际死亡
 		MissingNpcContent: 缺失内容：{0}
 	}
 
@@ -242,10 +243,8 @@ UI: {
 		SearchHint: 搜索名称…
 		ScopeCareer: 角色生涯
 		ScopeCurrentWorld: 角色当前世界
-		ScopeWorldPublic: 世界公共
 		ScopeCareerDescription: 范围：该角色的全部生涯。
 		ScopeCurrentWorldDescription: 范围：该角色所在的当前世界。
-		ScopeWorldPublicDescription: 范围：当前世界的公共数据。
 		ScopedTitleFormat: "{0} · {1}"
 		ScopedDescriptionFormat: "{0} {1}"
 		SourceAll: 全部来源

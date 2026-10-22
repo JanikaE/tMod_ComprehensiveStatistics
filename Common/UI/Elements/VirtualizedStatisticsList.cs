@@ -635,6 +635,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 StatisticsMetricDisplay.Mixed => 254f,
                 StatisticsMetricDisplay.ItemActivity => 370f,
+                StatisticsMetricDisplay.KillOutcomes => 370f,
                 StatisticsMetricDisplay.EconomyTransactions => 370f,
                 _ => 160f
             };
@@ -682,6 +683,32 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     leftPercent: 1f);
                 AddColumnHeader(
                     "Mods.ComprehensiveStatistics.UI.Items.DiscardUnitsColumn",
+                    StatisticsListSortColumn.Amount,
+                    leftPixels: -138f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.KillOutcomes)
+            {
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Kills.FinalKillsColumn",
+                    StatisticsListSortColumn.Events,
+                    leftPixels: -370f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Kills.AssistsColumn",
+                    StatisticsListSortColumn.Units,
+                    leftPixels: -254f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Kills.WorldDeathsColumn",
                     StatisticsListSortColumn.Amount,
                     leftPixels: -138f,
                     widthPixels: 116f,

@@ -10,13 +10,12 @@ using Terraria.UI;
 namespace ComprehensiveStatistics.Common.UI.Elements
 {
     /// <summary>
-    /// 统计查看范围；工具栏会根据当前 Tab 排除不适用的世界公共范围。
+    /// 角色统计查看范围；世界公共数据由需要它的页面直接并列表达。
     /// </summary>
     internal enum StatisticsViewScope
     {
         CharacterCareer,
-        CharacterCurrentWorld,
-        CurrentWorldPublic
+        CharacterCurrentWorld
     }
 
     /// <summary>
@@ -46,7 +45,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
         private StatisticsViewScope scope = StatisticsViewScope.CharacterCareer;
         private StatisticsContentSourceFilter sourceFilter = StatisticsContentSourceFilter.All;
-        private bool worldPublicScopeAvailable = true;
         private string searchQuery = string.Empty;
         private float lastWidth = -1f;
 
@@ -94,21 +92,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
         internal bool IsWritingSearchText => searchBar.IsWritingText;
 
-        /// <summary>
-        /// 设置当前页面是否允许选择世界公共统计范围。
-        /// </summary>
-        internal void SetWorldPublicScopeAvailable(bool available)
-        {
-            worldPublicScopeAvailable = available;
-            if (!available && scope == StatisticsViewScope.CurrentWorldPublic)
-            {
-                // 切入纯角色统计页时不能保留一个该页无法通过按钮再次选中的范围。
-                scope = StatisticsViewScope.CharacterCareer;
-            }
-
-            RefreshButtonLabels();
-        }
-
         public override void OnActivate()
         {
             base.OnActivate();
@@ -131,19 +114,20 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 根据可用宽度依次排列范围、内容来源和搜索控件。
+        /// 根据可用宽度依次排列角色范围、内容来源和搜索控件。
         /// </summary>
         private void UpdateControlLayout(float width)
         {
-            // 两个按钮按各自文本需求分配宽度，并始终为右侧搜索框保留最小空间。
-            float scopeWidth = MathHelper.Clamp(width * 0.25f, 92f, 180f);
-            float sourceWidth = MathHelper.Clamp(width * 0.22f, 82f, 160f);
+            // 两个按钮都同时展示全部可选项，因此按文本数量分配宽度，并为搜索框保留空间。
+            float scopeWidth = MathHelper.Clamp(width * 0.36f, 130f, 250f);
+            float sourceWidth = MathHelper.Clamp(width * 0.4f, 145f, 280f);
             float availableButtonWidth = MathHelper.Max(
                 2f,
-                width - ControlGap * 2f - 90f);
-            if (scopeWidth + sourceWidth > availableButtonWidth)
+                width - ControlGap * 2f - 70f);
+            float totalButtonWidth = scopeWidth + sourceWidth;
+            if (totalButtonWidth > availableButtonWidth)
             {
-                float scale = availableButtonWidth / (scopeWidth + sourceWidth);
+                float scale = availableButtonWidth / totalButtonWidth;
                 scopeWidth *= scale;
                 sourceWidth *= scale;
             }
@@ -151,10 +135,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             scopeButton.Left.Set(0f, 0f);
             scopeButton.Width.Set(scopeWidth, 0f);
 
-            sourceButton.Left.Set(scopeWidth + ControlGap, 0f);
+            float sourceLeft = scopeWidth + ControlGap;
+            sourceButton.Left.Set(sourceLeft, 0f);
             sourceButton.Width.Set(sourceWidth, 0f);
 
-            float searchLeft = scopeWidth + ControlGap + sourceWidth + ControlGap;
+            float searchLeft = sourceLeft + sourceWidth + ControlGap;
             searchPanel.Left.Set(searchLeft, 0f);
             searchPanel.Width.Set(-searchLeft, 1f);
             Recalculate();
@@ -181,21 +166,64 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 循环切换当前页面支持的统计查看范围。
+        /// 在角色生涯和角色当前世界之间循环切换。
         /// </summary>
         private void CycleScope()
         {
             StopSearchInput();
-            scope = scope switch
-            {
-                StatisticsViewScope.CharacterCareer => StatisticsViewScope.CharacterCurrentWorld,
-                StatisticsViewScope.CharacterCurrentWorld when worldPublicScopeAvailable =>
-                    StatisticsViewScope.CurrentWorldPublic,
-                _ => StatisticsViewScope.CharacterCareer
-            };
+            scope = scope == StatisticsViewScope.CharacterCareer
+                ? StatisticsViewScope.CharacterCurrentWorld
+                : StatisticsViewScope.CharacterCareer;
 
             RefreshButtonLabels();
             scopeChanged(scope);
+        }
+
+        /// <summary>
+        /// 使用 Terraria 颜色标记生成一个范围选项；选中项使用高亮字体色。
+        /// </summary>
+        private static string FormatSelectableOption(string label, bool selected)
+        {
+            string color = selected ? "EEF1FF" : "8290B8";
+            return $"[c/{color}:{label}]";
+        }
+
+        /// <summary>
+        /// 组合角色范围按钮文字，使两个可选范围始终同时可见。
+        /// </summary>
+        private string GetCombinedScopeText()
+        {
+            return string.Concat(
+                FormatSelectableOption(
+                    GetScopeText(StatisticsViewScope.CharacterCareer).Value,
+                    scope == StatisticsViewScope.CharacterCareer),
+                " / ",
+                FormatSelectableOption(
+                    GetScopeText(StatisticsViewScope.CharacterCurrentWorld).Value,
+                    scope == StatisticsViewScope.CharacterCurrentWorld));
+        }
+
+        /// <summary>
+        /// 组合来源范围按钮文字，使三个可选来源始终同时可见。
+        /// </summary>
+        private string GetCombinedSourceText()
+        {
+            StatisticsContentSourceFilter[] filters =
+            {
+                StatisticsContentSourceFilter.All,
+                StatisticsContentSourceFilter.Vanilla,
+                StatisticsContentSourceFilter.Modded
+            };
+            string[] options = new string[filters.Length];
+            for (int index = 0; index < filters.Length; index++)
+            {
+                StatisticsContentSourceFilter filter = filters[index];
+                options[index] = FormatSelectableOption(
+                    Language.GetTextValue(GetSourceLocalizationKey(filter)),
+                    sourceFilter == filter);
+            }
+
+            return string.Join(" / ", options);
         }
 
         /// <summary>
@@ -239,8 +267,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         /// </summary>
         private void RefreshButtonLabels()
         {
-            scopeButton.SetText(GetScopeText(scope));
-            sourceButton.SetText(Language.GetTextValue(GetSourceLocalizationKey(sourceFilter)));
+            scopeButton.SetText(GetCombinedScopeText());
+            sourceButton.SetText(GetCombinedSourceText());
         }
 
         /// <summary>
@@ -252,8 +280,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 StatisticsViewScope.CharacterCurrentWorld =>
                     "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeCurrentWorld",
-                StatisticsViewScope.CurrentWorldPublic =>
-                    "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeWorldPublic",
                 _ => "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeCareer"
             });
         }
@@ -267,8 +293,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 StatisticsViewScope.CharacterCurrentWorld =>
                     "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeCurrentWorldDescription",
-                StatisticsViewScope.CurrentWorldPublic =>
-                    "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeWorldPublicDescription",
                 _ => "Mods.ComprehensiveStatistics.UI.Toolbar.ScopeCareerDescription"
             });
         }
@@ -311,6 +335,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 text = new UIText(string.Empty, 0.68f);
                 text.HAlign = 0.5f;
                 text.VAlign = 0.5f;
+                text.TextColor = new Color(130, 144, 184);
+                text.DynamicallyScaleDownToWidth = true;
                 Append(text);
             }
 
@@ -335,6 +361,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 BackgroundColor = IsMouseHovering
                     ? new Color(63, 82, 151, 245)
                     : new Color(45, 59, 110, 235);
+                BorderColor = new Color(75, 97, 174, 255);
                 base.Update(gameTime);
             }
 
