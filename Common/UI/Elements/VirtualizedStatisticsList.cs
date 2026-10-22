@@ -359,11 +359,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 }
             }
 
-            // 无排序时保留数据定义顺序；启用列排序后，顶层分组也必须参与比较。
-            if (sortDirection != StatisticsListSortDirection.None)
-            {
-                filteredGroups.Sort(CompareFilteredGroups);
-            }
+            // 顶层分组承担各 Tab 的一级菜单导航语义，列排序只作用于其内部层级；
+            // 筛选前后都必须保持数据定义顺序，避免切换指标时页面结构随合计值跳动。
             foreach (FilteredGroup filteredGroup in filteredGroups)
             {
                 AppendDisplayGroup(filteredGroup, depth: 0, metricDisplay);
@@ -567,22 +564,6 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 按选中列比较两个顶层筛选分组。
-        /// </summary>
-        private int CompareFilteredGroups(FilteredGroup left, FilteredGroup right)
-        {
-            return CompareRows(
-                left.Group.Name,
-                left.TotalEvents,
-                left.TotalUnits,
-                left.TotalAmount,
-                right.Group.Name,
-                right.TotalEvents,
-                right.TotalUnits,
-                right.TotalAmount);
-        }
-
-        /// <summary>
         /// 按选中列比较同一层级的分组行或普通条目行。
         /// </summary>
         private int CompareSiblingEntries(SiblingEntry left, SiblingEntry right)
@@ -775,7 +756,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 选择列标题；数量列从降序开始，其余列从升序开始循环。
+        /// 选择列标题；名称列从升序开始，全部数值列从降序开始循环。
         /// </summary>
         private void SelectSortColumn(StatisticsListSortColumn column)
         {
@@ -791,18 +772,19 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 sortDirection = GetNextSortDirection(column, sortDirection);
             }
 
-            ApplySort(resetScroll: true);
+            // 排序只改变同层条目的先后，不应打断用户正在查看的滚动位置。
+            ApplySort(resetScroll: false);
             SoundEngine.PlaySound(SoundID.MenuTick);
         }
 
         /// <summary>
-        /// 获取列标题的下一排序状态；数量列按降序、升序、无排序循环。
+        /// 获取列标题的下一排序状态；全部数值列按降序、升序、无排序循环。
         /// </summary>
         private static StatisticsListSortDirection GetNextSortDirection(
             StatisticsListSortColumn column,
             StatisticsListSortDirection current)
         {
-            if (column == StatisticsListSortColumn.Units)
+            if (column != StatisticsListSortColumn.Name)
             {
                 return current switch
                 {
