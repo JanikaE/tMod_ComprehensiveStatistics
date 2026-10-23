@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using ComprehensiveStatistics.Common.Systems;
 using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -72,6 +73,10 @@ namespace ComprehensiveStatistics.Common.Players
         private ulong activeFishingCastSpawnUpdate;
         private bool activeFishingCastSucceeded;
         private bool activeFishingCastWasReeled;
+        private StableContentKey? activeFishingBaitContent;
+        private bool activeFishingBaitDecisionObserved;
+        private long activeFishingBaitExpectedConsumption;
+        private long activeFishingBaitActualConsumption;
 
         internal CharacterStatisticsData Data { get; private set; }
 
@@ -269,6 +274,7 @@ namespace ComprehensiveStatistics.Common.Players
                 activeFishingCastSpawnUpdate = currentUpdate;
                 activeFishingCastSucceeded = false;
                 activeFishingCastWasReeled = false;
+                BeginFishingBaitSession();
                 trackedFishingBobberIndices.Clear();
                 trackedFishingBobberIndices.Add(bobber.whoAmI);
                 Record(StatisticKeys.FishingCasts, new StatisticMetrics(events: 1L));
@@ -281,6 +287,37 @@ namespace ComprehensiveStatistics.Common.Players
             {
                 trackedFishingBobberIndices.Add(bobber.whoAmI);
             }
+        }
+
+        /// <summary>
+        /// 将原版鱼饵消耗入口确认的结果关联到当前抛竿会话。
+        /// 同一会话只接受第一次明确判定，避免多浮标或第三方重入造成重复计数。
+        /// </summary>
+        internal void ObserveFishingBaitDecision(
+            Projectile bobber,
+            int baitItemType,
+            long expectedConsumption,
+            long actualConsumption)
+        {
+            if (!IsOwnedByLocalClient
+                || !hasActiveFishingCast
+                || activeFishingBaitDecisionObserved
+                || bobber == null
+                || bobber.owner != Player.whoAmI
+                || !trackedFishingBobberIndices.Contains(bobber.whoAmI)
+                || expectedConsumption <= 0L
+                || actualConsumption < 0L
+                || !StableContentKey.TryCreateForItem(
+                    baitItemType,
+                    out StableContentKey baitContent))
+            {
+                return;
+            }
+
+            activeFishingBaitContent = baitContent;
+            activeFishingBaitDecisionObserved = true;
+            activeFishingBaitExpectedConsumption = expectedConsumption;
+            activeFishingBaitActualConsumption = actualConsumption;
         }
 
         /// <summary>
@@ -809,6 +846,31 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 记录一次已成功解析到具体弹药的应耗和实际消耗数量。
+        /// </summary>
+        internal void RecordAmmoUsage(
+            int ammoItemType,
+            long expectedConsumption,
+            long actualConsumption)
+        {
+            if (!IsOwnedByLocalClient
+                || expectedConsumption < 0L
+                || actualConsumption < 0L
+                || !StableContentKey.TryCreateForItem(
+                    ammoItemType,
+                    out StableContentKey ammoContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetAmmoUsageKey(ammoContent),
+                new StatisticMetrics(
+                    units: expectedConsumption,
+                    amount: actualConsumption));
+        }
+
+        /// <summary>
         /// 创建出售前快照，将原价退还数量与真正出售数量拆开。
         /// </summary>
         private PendingSaleSnapshot CreatePendingSaleSnapshot(
@@ -1058,11 +1120,13 @@ namespace ComprehensiveStatistics.Common.Players
                     ? StatisticKeys.FishingEmptyReels
                     : StatisticKeys.FishingInterruptedCasts;
             Record(resultKey, new StatisticMetrics(events: 1L));
+            RecordActiveFishingBaitUsage();
 
             hasActiveFishingCast = false;
             activeFishingCastSpawnUpdate = 0UL;
             activeFishingCastSucceeded = false;
             activeFishingCastWasReeled = false;
+            ClearActiveFishingBaitSession();
             trackedFishingBobberIndices.Clear();
             staleFishingBobberIndices.Clear();
         }
@@ -1079,8 +1143,52 @@ namespace ComprehensiveStatistics.Common.Players
             activeFishingCastSpawnUpdate = 0UL;
             activeFishingCastSucceeded = false;
             activeFishingCastWasReeled = false;
+            ClearActiveFishingBaitSession();
             trackedFishingBobberIndices.Clear();
             staleFishingBobberIndices.Clear();
+        }
+
+        /// <summary>
+        /// 在第一个有效浮标生成时保存当前标准选择顺序下的鱼饵。
+        /// 若后续真正进入消耗判定，会再用当时实际选中的鱼饵覆盖此快照。
+        /// </summary>
+        private void BeginFishingBaitSession()
+        {
+            ClearActiveFishingBaitSession();
+            if (StatisticsBaitSystem.TryGetSelectedBait(Player, out Item bait)
+                && StableContentKey.TryCreateForItem(
+                    bait.type,
+                    out StableContentKey baitContent))
+            {
+                activeFishingBaitContent = baitContent;
+            }
+        }
+
+        /// <summary>
+        /// 每次有效抛竿对具体鱼饵只提交一次使用；未进入消耗判定的
+        /// 主动空竿或其他中断仅增加使用次数，应耗与实耗均为零。
+        /// </summary>
+        private void RecordActiveFishingBaitUsage()
+        {
+            if (!activeFishingBaitContent.HasValue)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetFishingBaitUsageKey(activeFishingBaitContent.Value),
+                new StatisticMetrics(
+                    events: 1L,
+                    units: activeFishingBaitExpectedConsumption,
+                    amount: activeFishingBaitActualConsumption));
+        }
+
+        private void ClearActiveFishingBaitSession()
+        {
+            activeFishingBaitContent = null;
+            activeFishingBaitDecisionObserved = false;
+            activeFishingBaitExpectedConsumption = 0L;
+            activeFishingBaitActualConsumption = 0L;
         }
 
         /// <summary>
@@ -1688,6 +1796,24 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 记录本地所属玩家成功放置的一个实体物块。
+        /// </summary>
+        internal void RecordPlacedTile(int tileType)
+        {
+            if (!IsOwnedByLocalClient
+                || !StableContentKey.TryCreateForTileType(
+                    tileType,
+                    out StableContentKey tileContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetPlacedTileKey(tileContent),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
         /// 记录本地所属玩家成功挖掉的一个实体物块。
         /// </summary>
         internal void RecordMinedTile(int tileType)
@@ -1724,6 +1850,24 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 记录本地所属玩家成功放置的一格背景墙。
+        /// </summary>
+        internal void RecordPlacedWall(int wallType)
+        {
+            if (!IsOwnedByLocalClient
+                || !StableContentKey.TryCreateForWallType(
+                    wallType,
+                    out StableContentKey wallContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetPlacedWallKey(wallContent),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
         /// 记录本地所属玩家完整拆除的一个家具或多格物体；样式使用固定文化格式写入存档。
         /// </summary>
         internal void RecordRemovedTileObject(int tileType, int style)
@@ -1743,6 +1887,48 @@ namespace ComprehensiveStatistics.Common.Players
                     tileContent,
                     style.ToString(CultureInfo.InvariantCulture)),
                 new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 记录本地所属玩家成功放置的一个家具或多格物体；样式使用固定文化格式写入存档。
+        /// </summary>
+        internal void RecordPlacedTileObject(int tileType, int style)
+        {
+            tileType = GetCanonicalTileObjectType(tileType);
+            if (!IsOwnedByLocalClient
+                || style < 0
+                || !StableContentKey.TryCreateForTileType(
+                    tileType,
+                    out StableContentKey tileContent))
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetPlacedTileObjectKey(
+                    tileContent,
+                    style.ToString(CultureInfo.InvariantCulture)),
+                new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>
+        /// 记录本地所属玩家成功放置或拆除的一个电线/制动器组件。
+        /// 放置与拆除分别写入 Events 和 Units，世界格位没有实际变化时调用方不得提交。
+        /// </summary>
+        internal void RecordWiringComponentChange(
+            WiringComponentKind component,
+            bool placed)
+        {
+            if (!IsOwnedByLocalClient)
+            {
+                return;
+            }
+
+            Record(
+                StatisticKeys.GetWiringComponentActivityKey(component),
+                placed
+                    ? new StatisticMetrics(events: 1L)
+                    : new StatisticMetrics(units: 1L));
         }
 
         /// <summary>

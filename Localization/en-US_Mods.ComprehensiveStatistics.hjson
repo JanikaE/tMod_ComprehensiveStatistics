@@ -16,6 +16,9 @@ UI: {
 	Blocks: {
 		SolidTilesGroup: Blocks
 		BackgroundWallsGroup: Background walls
+		WiringComponentsGroup: Wires and actuators
+		WiringPlacedColumn: Placed
+		WiringRemovedColumn: Removed
 		MissingTileContent: Missing tile: {0}
 		MissingWallContent: Missing wall: {0}
 		MissingTileObjectContent: Missing furniture or multi-tile object: {0}
@@ -55,6 +58,14 @@ UI: {
 			Lava: Lava cavern wall
 			Rocks: Rocky cavern wall
 		}
+
+		WiringComponents: {
+			RedWire: Red wire
+			BlueWire: Blue wire
+			GreenWire: Green wire
+			YellowWire: Yellow wire
+			Actuator: Actuator
+		}
 	}
 
 	Survival: {
@@ -91,7 +102,31 @@ UI: {
 		PickupUnitsColumn: Units picked up
 		UseEventsColumn: Uses
 		DiscardUnitsColumn: Units discarded
+		AmmoExpectedUnitsColumn: Expected use
+		AmmoConsumedUnitsColumn: Consumed
+		AmmoConsumptionRateColumn: Consumption rate
+		CustomAmmoCategoryFormat: "{0} ammo"
 		MissingItemContent: Missing content: {0}
+
+		AmmoCategories: {
+			Arrow: Arrows
+			Bullet: Bullets
+			Rocket: Rockets
+			Dart: Darts
+			Solution: Solutions
+			Gel: Gel
+			FallenStar: Fallen stars
+			Sand: Sand
+			Coin: Coins
+			Flare: Flares
+			Snowball: Snowballs
+			Stake: Stakes
+			CandyCorn: Candy corn
+			JackOLantern: Explosive jack 'o lanterns
+			Nail: Nails
+			StyngerBolt: Stynger bolts
+			Other: Other or unclassified
+		}
 	}
 
 	Interactions: {
@@ -147,6 +182,8 @@ UI: {
 
 	Fishing: {
 		CastsGroup: Casts
+		EventsColumn: Events
+		UnitsColumn: Units
 		SuccessfulCatches: Successful catches
 		EmptyReels: Reeled in without a catch
 		InterruptedCasts: Other interruptions
@@ -157,6 +194,12 @@ UI: {
 			Honey: Honey
 			Lava: Lava
 		}
+	}
+
+	Bait: {
+		UsageGroup: Bait usage
+		NameFormat: "{0} ({1}% bait power)"
+		MissingItemContent: Missing content: {0}
 	}
 
 	Movement: {
@@ -178,19 +221,19 @@ UI: {
 	}
 
 	Tabs: {
-		Overview: {
-			Title: Overview
-			Description: Representative totals and frequently used summaries will appear here.
-		}
-
 		Blocks: {
 			Title: Blocks
-			Description: Block mining and background wall removal statistics appear here; furniture and multi-tile objects are included under Blocks.
+			Description: Block, background wall, wire, and actuator placement or removal statistics appear here; furniture and multi-tile objects are included under Blocks.
 		}
 
 		Items: {
 			Title: Items
-			Description: Item pickup, use, and discard statistics will appear here.
+			Description: Item pickup, use, and discard statistics appear here.
+		}
+
+		Ammo: {
+			Title: Ammo
+			Description: Expected use, actual consumption, and consumption rates appear here by ammo category and item.
 		}
 
 		Interactions: {
@@ -210,7 +253,12 @@ UI: {
 
 		Fishing: {
 			Title: Fishing
-			Description: Casts, catches, interrupted casts, and catch details will appear here.
+			Description: Casts, catches, interrupted casts, and catch details appear here.
+		}
+
+		Bait: {
+			Title: Bait
+			Description: Expected use, actual consumption, and consumption rates appear here by bait item.
 		}
 
 		Movement: {

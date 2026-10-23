@@ -14,7 +14,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         Name,
         Events,
         Units,
-        Amount
+        Amount,
+        Rate
     }
 
     /// <summary>
@@ -38,7 +39,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         Amount,
         Distance,
         Mixed,
+        WiringActivity,
         ItemActivity,
+        AmmoActivity,
+        FishingActivity,
+        FishingEvents,
+        FishingCatchActivity,
         KillOutcomes,
         EconomyTransactions
     }
@@ -125,7 +131,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             int? vanillaContentId = null,
             int amountIconType = 0,
             Asset<Texture2D> amountIcon = null,
-            StatisticsTileIconLayout tileIconLayout = null)
+            StatisticsTileIconLayout tileIconLayout = null,
+            long? rateUnits = null,
+            long? rateAmount = null)
         {
             if (nameIsLocalizationKey)
             {
@@ -149,6 +157,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             AmountIconType = amountIconType;
             AmountIcon = amountIcon;
             TileIconLayout = tileIconLayout;
+            RateUnits = rateUnits ?? units;
+            RateAmount = rateAmount ?? amount;
         }
 
         internal string Name => localizationKey != null
@@ -166,6 +176,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal long Units { get; }
 
         internal long Amount { get; }
+
+        // 比率可使用独立的累计分母与分子。弹药页用此排除非消耗型
+        // 弹药的比率计算，同时仍在“应耗数量”列保留其使用次数。
+        internal long RateUnits { get; }
+
+        internal long RateAmount { get; }
 
         internal StatisticsContentSource Source { get; }
 
@@ -247,6 +263,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 TotalEvents = SaturatingAdd(TotalEvents, item.Events);
                 TotalUnits = SaturatingAdd(TotalUnits, item.Units);
                 TotalAmount = SaturatingAdd(TotalAmount, item.Amount);
+                TotalRateUnits = SaturatingAdd(TotalRateUnits, item.RateUnits);
+                TotalRateAmount = SaturatingAdd(TotalRateAmount, item.RateAmount);
             }
 
             foreach (StatisticsListGroup childGroup in ChildGroups)
@@ -254,6 +272,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 TotalEvents = SaturatingAdd(TotalEvents, childGroup.TotalEvents);
                 TotalUnits = SaturatingAdd(TotalUnits, childGroup.TotalUnits);
                 TotalAmount = SaturatingAdd(TotalAmount, childGroup.TotalAmount);
+                TotalRateUnits = SaturatingAdd(TotalRateUnits, childGroup.TotalRateUnits);
+                TotalRateAmount = SaturatingAdd(TotalRateAmount, childGroup.TotalRateAmount);
             }
         }
 
@@ -278,6 +298,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal long TotalUnits { get; private set; }
 
         internal long TotalAmount { get; private set; }
+
+        internal long TotalRateUnits { get; private set; }
+
+        internal long TotalRateAmount { get; private set; }
 
         internal bool IsExpanded { get; set; }
 

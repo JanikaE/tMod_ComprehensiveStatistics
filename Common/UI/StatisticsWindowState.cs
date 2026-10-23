@@ -22,24 +22,26 @@ using Terraria.UI;
 namespace ComprehensiveStatistics.Common.UI
 {
     /// <summary>
-    /// 统计主窗口，负责九个 Tab 的导航、响应式布局以及各页内容的装载。
+    /// 统计主窗口，负责十个统计 Tab 的导航、响应式布局以及各页内容的装载。
     /// </summary>
     internal sealed class StatisticsWindowState : UIState
     {
-        private const int TabCount = 9;
+        private const int TabCount = 10;
         private const float WindowMargin = 12f;
         private const float WindowPadding = 12f;
         private const float HeaderHeight = 40f;
         private const float ColumnGap = 10f;
         private const float TabGap = 4f;
-        private const int BlocksTabIndex = 1;
-        private const int ItemsTabIndex = 2;
+        private const int BlocksTabIndex = 0;
+        private const int ItemsTabIndex = 1;
+        private const int AmmoTabIndex = 2;
         private const int InteractionsTabIndex = 3;
         private const int KillsTabIndex = 4;
         private const int EconomyTabIndex = 5;
         private const int FishingTabIndex = 6;
-        private const int MovementTabIndex = 7;
-        private const int SurvivalTabIndex = 8;
+        private const int BaitTabIndex = 7;
+        private const int MovementTabIndex = 8;
+        private const int SurvivalTabIndex = 9;
         private const float ToolbarTop = 38f;
         private const float ToolbarHeight = 28f;
         private const float ListTop = 74f;
@@ -48,13 +50,14 @@ namespace ComprehensiveStatistics.Common.UI
         // 顺序同时决定导航显示顺序，键名用于拼接各 Tab 的本地化路径。
         private static readonly string[] TabLocalizationKeys =
         {
-            "Overview",
             "Blocks",
             "Items",
+            "Ammo",
             "Interactions",
             "Kills",
             "Economy",
             "Fishing",
+            "Bait",
             "Movement",
             "Survival"
         };
@@ -72,10 +75,12 @@ namespace ComprehensiveStatistics.Common.UI
         private StatisticsToolbar toolbar;
         private VirtualizedStatisticsList blockList;
         private VirtualizedStatisticsList itemList;
+        private VirtualizedStatisticsList ammoList;
         private VirtualizedStatisticsList interactionList;
         private VirtualizedStatisticsList killList;
         private VirtualizedStatisticsList economyList;
         private VirtualizedStatisticsList fishingList;
+        private VirtualizedStatisticsList baitList;
         private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
         private UIImageButton closeButton;
@@ -83,14 +88,21 @@ namespace ComprehensiveStatistics.Common.UI
         private Point lastViewportSize;
         private bool isBlockListAttached;
         private bool isItemListAttached;
+        private bool isAmmoListAttached;
         private bool isInteractionListAttached;
         private bool isKillListAttached;
         private bool isEconomyListAttached;
         private bool isFishingListAttached;
+        private bool isBaitListAttached;
         private bool isMovementListAttached;
         private bool isSurvivalListAttached;
+        private bool runtimeStatisticsAccessEnabled;
 
         internal bool IsWritingSearchText => toolbar?.IsWritingSearchText == true;
+
+        private bool CanReadRuntimeStatistics => runtimeStatisticsAccessEnabled
+            && !Main.gameMenu
+            && Main.LocalPlayer?.active == true;
 
         /// <summary>
         /// 开始一次新的窗口会话，恢复各 Tab 列表默认的折叠与无排序状态。
@@ -99,12 +111,32 @@ namespace ComprehensiveStatistics.Common.UI
         {
             blockList?.ResetTransientState();
             itemList?.ResetTransientState();
+            ammoList?.ResetTransientState();
             interactionList?.ResetTransientState();
             killList?.ResetTransientState();
             economyList?.ResetTransientState();
             fishingList?.ResetTransientState();
+            baitList?.ResetTransientState();
             movementList?.ResetTransientState();
             survivalList?.ResetTransientState();
+        }
+
+        /// <summary>
+        /// 在窗口真正打开后启用角色数据访问，并刷新默认或上次选中的统计页。
+        /// </summary>
+        internal void BeginRuntimeStatisticsAccess()
+        {
+            runtimeStatisticsAccessEnabled = true;
+            UpdateWindowHeaderLayout();
+            UpdatePageHeading();
+        }
+
+        /// <summary>
+        /// 在窗口关闭前停止访问角色数据，避免世界卸载或模组加载阶段读取未就绪的 ModPlayer 数组。
+        /// </summary>
+        internal void EndRuntimeStatisticsAccess()
+        {
+            runtimeStatisticsAccessEnabled = false;
         }
 
         public override void OnInitialize()
@@ -186,7 +218,7 @@ namespace ComprehensiveStatistics.Common.UI
 
             blockList = new VirtualizedStatisticsList(
                 CreateBlockGroups(data: null),
-                StatisticsMetricDisplay.Events);
+                StatisticsMetricDisplay.WiringActivity);
             blockList.Top.Set(ListTop, 0f);
             blockList.Width.Set(0f, 1f);
             blockList.Height.Set(-ListTop, 1f);
@@ -212,6 +244,13 @@ namespace ComprehensiveStatistics.Common.UI
             itemList.Width.Set(0f, 1f);
             itemList.Height.Set(-ListTop, 1f);
 
+            ammoList = new VirtualizedStatisticsList(
+                CreateAmmoGroups(data: null),
+                StatisticsMetricDisplay.AmmoActivity);
+            ammoList.Top.Set(ListTop, 0f);
+            ammoList.Width.Set(0f, 1f);
+            ammoList.Height.Set(-ListTop, 1f);
+
             interactionList = new VirtualizedStatisticsList(
                 CreateInteractionGroups(data: null),
                 StatisticsMetricDisplay.Events);
@@ -235,17 +274,26 @@ namespace ComprehensiveStatistics.Common.UI
 
             fishingList = new VirtualizedStatisticsList(
                 CreateFishingGroups(data: null),
-                StatisticsMetricDisplay.UnitsAndEvents);
+                StatisticsMetricDisplay.FishingActivity);
             fishingList.Top.Set(ListTop, 0f);
             fishingList.Width.Set(0f, 1f);
             fishingList.Height.Set(-ListTop, 1f);
 
+            baitList = new VirtualizedStatisticsList(
+                CreateBaitGroups(data: null),
+                StatisticsMetricDisplay.AmmoActivity);
+            baitList.Top.Set(ListTop, 0f);
+            baitList.Width.Set(0f, 1f);
+            baitList.Height.Set(-ListTop, 1f);
+
             blockList.ExpansionStateChanged += UpdateExpandCollapseButton;
             itemList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            ammoList.ExpansionStateChanged += UpdateExpandCollapseButton;
             interactionList.ExpansionStateChanged += UpdateExpandCollapseButton;
             killList.ExpansionStateChanged += UpdateExpandCollapseButton;
             economyList.ExpansionStateChanged += UpdateExpandCollapseButton;
             fishingList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            baitList.ExpansionStateChanged += UpdateExpandCollapseButton;
             movementList.ExpansionStateChanged += UpdateExpandCollapseButton;
             survivalList.ExpansionStateChanged += UpdateExpandCollapseButton;
 
@@ -268,8 +316,8 @@ namespace ComprehensiveStatistics.Common.UI
         {
             base.OnActivate();
 
-            // UIState 在 ModSystem.Load 中会预激活一次；窗口实际打开时重新解析格式化文本，
-            // 避免首次显示仍保留尚未注册时得到的本地化键名。
+            // UIState 在 ModSystem.Load 中会预激活一次。此处只刷新不依赖角色运行时
+            // 数据的界面文本；真实统计由 BeginRuntimeStatisticsAccess 在窗口打开后启用。
             if (contentTitle != null && toolbar != null)
             {
                 UpdateWindowHeaderLayout();
@@ -319,10 +367,12 @@ namespace ComprehensiveStatistics.Common.UI
             UpdatePageHeading();
             SetBlockTotalsVisible(tabIndex == BlocksTabIndex);
             SetItemTotalsVisible(tabIndex == ItemsTabIndex);
+            SetAmmoTotalsVisible(tabIndex == AmmoTabIndex);
             SetInteractionTotalsVisible(tabIndex == InteractionsTabIndex);
             SetKillTotalsVisible(tabIndex == KillsTabIndex);
             SetEconomyTotalsVisible(tabIndex == EconomyTabIndex);
             SetFishingTotalsVisible(tabIndex == FishingTabIndex);
+            SetBaitTotalsVisible(tabIndex == BaitTabIndex);
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
             UpdateExpandCollapseButton();
@@ -407,7 +457,7 @@ namespace ComprehensiveStatistics.Common.UI
             contentPanel.Height.Set(bodyHeight, 0f);
 
             float navigationInnerHeight = MathHelper.Max(1f, bodyHeight - 8f);
-            // 高度不足时同步缩小间距，确保九个 Tab 仍全部留在窗口内。
+            // 高度不足时同步缩小间距，确保十个 Tab 仍全部留在窗口内。
             float effectiveTabGap = navigationInnerHeight >= 120f ? TabGap : 1f;
             float tabHeight = MathHelper.Max(
                 1f,
@@ -448,10 +498,12 @@ namespace ComprehensiveStatistics.Common.UI
         {
             blockList.SetFilters(searchQuery, sourceFilter);
             itemList.SetFilters(searchQuery, sourceFilter);
+            ammoList.SetFilters(searchQuery, sourceFilter);
             interactionList.SetFilters(searchQuery, sourceFilter);
             killList.SetFilters(searchQuery, sourceFilter);
             economyList.SetFilters(searchQuery, sourceFilter);
             fishingList.SetFilters(searchQuery, sourceFilter);
+            baitList.SetFilters(searchQuery, sourceFilter);
             movementList.SetFilters(searchQuery, sourceFilter);
             survivalList.SetFilters(searchQuery, sourceFilter);
         }
@@ -471,7 +523,7 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 取得当前页面已实现的树形统计列表；占位页面返回空值。
+        /// 取得当前页面的树形统计列表；无效索引返回空值。
         /// </summary>
         private VirtualizedStatisticsList GetActiveStatisticsList()
         {
@@ -479,10 +531,12 @@ namespace ComprehensiveStatistics.Common.UI
             {
                 BlocksTabIndex => blockList,
                 ItemsTabIndex => itemList,
+                AmmoTabIndex => ammoList,
                 InteractionsTabIndex => interactionList,
                 KillsTabIndex => killList,
                 EconomyTabIndex => economyList,
                 FishingTabIndex => fishingList,
+                BaitTabIndex => baitList,
                 MovementTabIndex => movementList,
                 SurvivalTabIndex => survivalList,
                 _ => null
@@ -521,9 +575,11 @@ namespace ComprehensiveStatistics.Common.UI
 
             float titleWidth = FontAssets.MouseText.Value.MeasureString(titleText).X * 1.08f;
             float descriptionLeft = titleWidth + 18f;
+            float headerButtonsWidth = ExpandCollapseButtonWidth + 12f;
+
             contentDescription.Left.Set(descriptionLeft, 0f);
             contentDescription.Width.Set(
-                -descriptionLeft - ExpandCollapseButtonWidth - 12f,
+                -descriptionLeft - headerButtonsWidth,
                 1f);
             UpdateExpandCollapseButton();
             UpdateStatisticsStartedAt(scope);
@@ -549,7 +605,7 @@ namespace ComprehensiveStatistics.Common.UI
         {
             DateTimeOffset? startedAtUtc = null;
 
-            if (!Main.gameMenu && Main.LocalPlayer?.active == true)
+            if (CanReadRuntimeStatistics)
             {
                 StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
                 startedAtUtc = scope == StatisticsViewScope.CharacterCurrentWorld
@@ -573,10 +629,12 @@ namespace ComprehensiveStatistics.Common.UI
             UpdateMovementTotals(scope);
             UpdateBlockTotals(scope);
             UpdateItemTotals(scope);
+            UpdateAmmoTotals(scope);
             UpdateInteractionTotals(scope);
             UpdateKillTotals(scope);
             UpdateEconomyTotals(scope);
             UpdateFishingTotals(scope);
+            UpdateBaitTotals(scope);
         }
 
         /// <summary>
@@ -584,7 +642,7 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private void UpdateKillTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != KillsTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != KillsTabIndex)
             {
                 return;
             }
@@ -602,7 +660,7 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private void UpdateInteractionTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != InteractionsTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != InteractionsTabIndex)
             {
                 return;
             }
@@ -615,11 +673,11 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 从当前角色范围重新生成物块与背景墙拆除明细。
+        /// 从当前角色范围重新生成物块、背景墙与布线组件的放置和拆除明细。
         /// </summary>
         private void UpdateBlockTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != BlocksTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != BlocksTabIndex)
             {
                 return;
             }
@@ -632,11 +690,11 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 从当前角色范围重新生成物品页的拾取统计。
+        /// 从当前角色范围重新生成物品页的拾取、使用与丢弃统计。
         /// </summary>
         private void UpdateItemTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != ItemsTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != ItemsTabIndex)
             {
                 return;
             }
@@ -649,11 +707,28 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
+        /// 从当前角色范围重新生成弹药应耗与实际消耗统计。
+        /// </summary>
+        private void UpdateAmmoTotals(StatisticsViewScope scope)
+        {
+            if (!CanReadRuntimeStatistics || selectedTabIndex != AmmoTabIndex)
+            {
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            ammoList.SetGroups(CreateAmmoGroups(scopeData));
+        }
+
+        /// <summary>
         /// 从当前角色范围重新生成经济页的买卖明细与护士治疗统计。
         /// </summary>
         private void UpdateEconomyTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != EconomyTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != EconomyTabIndex)
             {
                 return;
             }
@@ -670,7 +745,7 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private void UpdateFishingTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != FishingTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != FishingTabIndex)
             {
                 return;
             }
@@ -683,11 +758,28 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
+        /// 从当前角色范围重新生成鱼饵应耗、实耗与消耗率明细。
+        /// </summary>
+        private void UpdateBaitTotals(StatisticsViewScope scope)
+        {
+            if (!CanReadRuntimeStatistics || selectedTabIndex != BaitTabIndex)
+            {
+                return;
+            }
+
+            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
+                ? statisticsPlayer.CurrentWorldSlice
+                : statisticsPlayer.Data?.Career;
+            baitList.SetGroups(CreateBaitGroups(scopeData));
+        }
+
+        /// <summary>
         /// 从当前角色范围重新生成移动页的总距离统计。
         /// </summary>
         private void UpdateMovementTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != MovementTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != MovementTabIndex)
             {
                 return;
             }
@@ -704,7 +796,7 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private void UpdateSurvivalTotals(StatisticsViewScope scope)
         {
-            if (selectedTabIndex != SurvivalTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != SurvivalTabIndex)
             {
                 return;
             }
@@ -743,6 +835,35 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             isItemListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 按需挂载弹药统计列表，并在显示时刷新当前范围的数据。
+        /// </summary>
+        private void SetAmmoTotalsVisible(bool visible)
+        {
+            if (visible == isAmmoListAttached)
+            {
+                if (visible)
+                {
+                    UpdateAmmoTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(ammoList);
+                UpdateAmmoTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                ammoList.Remove();
+            }
+
+            isAmmoListAttached = visible;
             contentPanel.Recalculate();
         }
 
@@ -1142,7 +1263,9 @@ namespace ComprehensiveStatistics.Common.UI
             StableContentKey content,
             long events,
             long units = 0L,
-            long amount = 0L)
+            long amount = 0L,
+            long? rateUnits = null,
+            long? rateAmount = null)
         {
             bool resolved = content.TryResolveNpcType(out int npcType);
             StatisticsContentSource source = GetContentSource(content);
@@ -1170,7 +1293,9 @@ namespace ComprehensiveStatistics.Common.UI
                 content: content,
                 vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
                     ? npcType
-                    : null);
+                    : null,
+                rateUnits: rateUnits,
+                rateAmount: rateAmount);
         }
 
         /// <summary>
@@ -1766,12 +1891,17 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 将物块（含家具/多格物体）和背景墙拆除记录转换为两个一级分组。
+        /// 将物块、背景墙和布线组件记录转换为三个一级分组。
         /// </summary>
         private static IEnumerable<StatisticsListGroup> CreateBlockGroups(StatisticsData data)
         {
-            List<StatisticsListItem> minedTiles = new List<StatisticsListItem>();
-            List<StatisticsListItem> removedWalls = new List<StatisticsListItem>();
+            List<StatisticsListItem> tiles = new List<StatisticsListItem>();
+            List<StatisticsListItem> walls = new List<StatisticsListItem>();
+            List<StatisticsListItem> wiringComponents = new List<StatisticsListItem>();
+            Dictionary<StableContentKey, StatisticMetrics> normalizedTiles =
+                new Dictionary<StableContentKey, StatisticMetrics>();
+            Dictionary<StableContentKey, StatisticMetrics> normalizedWalls =
+                new Dictionary<StableContentKey, StatisticMetrics>();
             Dictionary<StatisticKey, StatisticMetrics> normalizedTileObjects =
                 new Dictionary<StatisticKey, StatisticMetrics>();
             if (data != null)
@@ -1786,26 +1916,56 @@ namespace ComprehensiveStatistics.Common.UI
 
                     if (string.Equals(
                         pair.Key.StatisticId,
+                        StatisticKeys.TilePlacedStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        AddActivityMetrics(
+                            normalizedTiles,
+                            pair.Key.Content.Value,
+                            placed: pair.Value.Events,
+                            removed: 0L);
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
                         StatisticKeys.TileMinedStatisticId,
                         StringComparison.Ordinal))
                     {
-                        minedTiles.Add(CreateTileStatisticsItem(
+                        AddActivityMetrics(
+                            normalizedTiles,
                             pair.Key.Content.Value,
-                            pair.Value.Events));
+                            placed: 0L,
+                            removed: pair.Value.Events);
+                    }
+                    else if (string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.WallPlacedStatisticId,
+                        StringComparison.Ordinal))
+                    {
+                        AddActivityMetrics(
+                            normalizedWalls,
+                            pair.Key.Content.Value,
+                            placed: pair.Value.Events,
+                            removed: 0L);
                     }
                     else if (string.Equals(
                         pair.Key.StatisticId,
                         StatisticKeys.WallRemovedStatisticId,
                         StringComparison.Ordinal))
                     {
-                        removedWalls.Add(CreateWallStatisticsItem(
+                        AddActivityMetrics(
+                            normalizedWalls,
                             pair.Key.Content.Value,
-                            pair.Value.Events));
+                            placed: 0L,
+                            removed: pair.Value.Events);
                     }
                     else if (string.Equals(
-                        pair.Key.StatisticId,
-                        StatisticKeys.TileObjectRemovedStatisticId,
-                        StringComparison.Ordinal))
+                            pair.Key.StatisticId,
+                            StatisticKeys.TileObjectPlacedStatisticId,
+                            StringComparison.Ordinal)
+                        || string.Equals(
+                            pair.Key.StatisticId,
+                            StatisticKeys.TileObjectRemovedStatisticId,
+                            StringComparison.Ordinal))
                     {
                         StableContentKey content = pair.Key.Content.Value;
                         string style = NormalizePersistedTileObjectStyle(
@@ -1817,33 +1977,115 @@ namespace ComprehensiveStatistics.Common.UI
                         normalizedTileObjects.TryGetValue(
                             normalizedKey,
                             out StatisticMetrics current);
-                        normalizedTileObjects[normalizedKey] = current.Add(pair.Value);
+                        bool placed = string.Equals(
+                            pair.Key.StatisticId,
+                            StatisticKeys.TileObjectPlacedStatisticId,
+                            StringComparison.Ordinal);
+                        normalizedTileObjects[normalizedKey] = current.Add(
+                            new StatisticMetrics(
+                                events: placed ? pair.Value.Events : 0L,
+                                units: placed ? 0L : pair.Value.Events));
                     }
                 }
+            }
+
+            foreach (KeyValuePair<StableContentKey, StatisticMetrics> pair in normalizedTiles)
+            {
+                tiles.Add(CreateTileStatisticsItem(
+                    pair.Key,
+                    pair.Value.Events,
+                    pair.Value.Units));
+            }
+
+            foreach (KeyValuePair<StableContentKey, StatisticMetrics> pair in normalizedWalls)
+            {
+                walls.Add(CreateWallStatisticsItem(
+                    pair.Key,
+                    pair.Value.Events,
+                    pair.Value.Units));
             }
 
             foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in normalizedTileObjects)
             {
                 // 家具和多格物体保留独立采集口径与样式键，但与普通物块显示在同一一级分组。
-                minedTiles.Add(CreateTileObjectStatisticsItem(
+                tiles.Add(CreateTileObjectStatisticsItem(
                     pair.Key.Content.Value,
                     pair.Key.Style,
-                    pair.Value.Events));
+                    pair.Value.Events,
+                    pair.Value.Units));
+            }
+
+            foreach (WiringComponentKind component in Enum.GetValues<WiringComponentKind>())
+            {
+                StatisticMetrics metrics = data?.GetValue(
+                    StatisticKeys.GetWiringComponentActivityKey(component)) ?? default;
+                if (metrics.IsZero)
+                {
+                    continue;
+                }
+
+                StableContentKey content = StatisticKeys.GetWiringComponentContent(component);
+                Asset<Texture2D> icon = GetWiringComponentIcon(component);
+                wiringComponents.Add(new StatisticsListItem(
+                    $"Mods.ComprehensiveStatistics.UI.Blocks.WiringComponents.{component}",
+                    itemType: 0,
+                    icon: icon,
+                    events: metrics.Events,
+                    units: metrics.Units,
+                    source: StatisticsContentSource.Vanilla,
+                    nameIsLocalizationKey: true,
+                    iconKind: StatisticsIconKind.Tile,
+                    content: content,
+                    vanillaContentId: (int)component));
             }
 
             return new[]
             {
                 new StatisticsListGroup(
                     "Mods.ComprehensiveStatistics.UI.Blocks.SolidTilesGroup",
-                    minedTiles,
+                    tiles,
                     nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.Events),
+                    metricDisplay: StatisticsMetricDisplay.WiringActivity),
                 new StatisticsListGroup(
                     "Mods.ComprehensiveStatistics.UI.Blocks.BackgroundWallsGroup",
-                    removedWalls,
+                    walls,
                     nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.Events)
+                    metricDisplay: StatisticsMetricDisplay.WiringActivity),
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.WiringComponentsGroup",
+                    wiringComponents,
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.WiringActivity)
             };
+        }
+
+        /// <summary>
+        /// 获取四种电线和制动器各自的原版世界组件贴图，用作统计列表图标。
+        /// </summary>
+        private static Asset<Texture2D> GetWiringComponentIcon(WiringComponentKind component)
+        {
+            return component switch
+            {
+                WiringComponentKind.RedWire => TextureAssets.Wire,
+                WiringComponentKind.BlueWire => TextureAssets.Wire2,
+                WiringComponentKind.GreenWire => TextureAssets.Wire3,
+                WiringComponentKind.YellowWire => TextureAssets.Wire4,
+                WiringComponentKind.Actuator => TextureAssets.Actuator,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// 将一项放置或拆除计数累加到界面共用的双列指标中。
+        /// </summary>
+        private static void AddActivityMetrics<TKey>(
+            Dictionary<TKey, StatisticMetrics> target,
+            TKey key,
+            long placed,
+            long removed)
+        {
+            target.TryGetValue(key, out StatisticMetrics current);
+            target[key] = current.Add(new StatisticMetrics(placed, removed));
         }
 
         /// <summary>
@@ -1874,7 +2116,8 @@ namespace ComprehensiveStatistics.Common.UI
         private static StatisticsListItem CreateTileObjectStatisticsItem(
             StableContentKey content,
             string persistedStyle,
-            long events)
+            long placedCount,
+            long removedCount)
         {
             bool resolved = content.TryResolveTileType(out int tileType);
             bool styleResolved = int.TryParse(
@@ -1938,8 +2181,8 @@ namespace ComprehensiveStatistics.Common.UI
                 name,
                 itemType: iconType,
                 icon: icon,
-                events: events,
-                units: 0L,
+                events: placedCount,
+                units: removedCount,
                 source: source,
                 iconKind: iconKind,
                 content: content,
@@ -2020,7 +2263,8 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private static StatisticsListItem CreateTileStatisticsItem(
             StableContentKey content,
-            long events)
+            long placedCount,
+            long removedCount)
         {
             bool resolved = content.TryResolveTileType(out int tileType);
             StatisticsContentSource source = GetContentSource(content);
@@ -2055,8 +2299,8 @@ namespace ComprehensiveStatistics.Common.UI
                 name,
                 itemType: iconType,
                 icon: icon,
-                events: events,
-                units: 0L,
+                events: placedCount,
+                units: removedCount,
                 source: source,
                 iconKind: iconKind,
                 content: content,
@@ -2188,7 +2432,8 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private static StatisticsListItem CreateWallStatisticsItem(
             StableContentKey content,
-            long events)
+            long placedCount,
+            long removedCount)
         {
             bool resolved = content.TryResolveWallType(out int wallType);
             StatisticsContentSource source = GetContentSource(content);
@@ -2221,8 +2466,8 @@ namespace ComprehensiveStatistics.Common.UI
                 name,
                 itemType: iconType,
                 icon: icon,
-                events: events,
-                units: 0L,
+                events: placedCount,
+                units: removedCount,
                 source: source,
                 iconKind: iconKind,
                 content: content,
@@ -2511,6 +2756,251 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
+        /// 将具体弹药的应耗和实耗数据按原版或模组弹药类别组成独立表格。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateAmmoGroups(StatisticsData data)
+        {
+            Dictionary<int, List<StatisticsListItem>> itemsByCategory =
+                new Dictionary<int, List<StatisticsListItem>>();
+            if (data != null)
+            {
+                foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+                {
+                    if (!pair.Key.Content.HasValue
+                        || pair.Value.IsZero
+                        || !string.Equals(
+                            pair.Key.StatisticId,
+                            StatisticKeys.AmmoUsageStatisticId,
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    StatisticsListItem item = CreateAmmoStatisticsItem(
+                        pair.Key.Content.Value,
+                        pair.Value.Events,
+                        pair.Value.Units,
+                        pair.Value.Amount,
+                        out int ammoCategory);
+                    ammoCategory = NormalizeAmmoCategory(ammoCategory);
+                    if (!itemsByCategory.TryGetValue(
+                        ammoCategory,
+                        out List<StatisticsListItem> categoryItems))
+                    {
+                        categoryItems = new List<StatisticsListItem>();
+                        itemsByCategory.Add(ammoCategory, categoryItems);
+                    }
+
+                    categoryItems.Add(item);
+                }
+            }
+
+            List<KeyValuePair<int, StatisticsListGroup>> keyedGroups =
+                new List<KeyValuePair<int, StatisticsListGroup>>(itemsByCategory.Count);
+            foreach (KeyValuePair<int, List<StatisticsListItem>> pair in itemsByCategory)
+            {
+                string localizationKey = GetAmmoCategoryLocalizationKey(pair.Key);
+                string name = localizationKey ?? GetCustomAmmoCategoryName(pair.Key);
+                bool nameIsLocalizationKey = localizationKey != null;
+                Asset<Texture2D> icon = GetAmmoCategoryIcon(pair.Key, out int iconType);
+                keyedGroups.Add(new KeyValuePair<int, StatisticsListGroup>(
+                    pair.Key,
+                    new StatisticsListGroup(
+                        name,
+                        pair.Value,
+                        nameIsLocalizationKey: nameIsLocalizationKey,
+                        metricDisplay: StatisticsMetricDisplay.AmmoActivity,
+                        iconType: iconType,
+                        icon: icon,
+                        iconKind: StatisticsIconKind.Item)));
+            }
+
+            keyedGroups.Sort((left, right) =>
+            {
+                int orderComparison = GetAmmoCategoryOrder(left.Key).CompareTo(
+                    GetAmmoCategoryOrder(right.Key));
+                return orderComparison != 0
+                    ? orderComparison
+                    : string.Compare(
+                        left.Value.Name,
+                        right.Value.Name,
+                        StringComparison.CurrentCulture);
+            });
+
+            List<StatisticsListGroup> groups =
+                new List<StatisticsListGroup>(keyedGroups.Count);
+            foreach (KeyValuePair<int, StatisticsListGroup> pair in keyedGroups)
+            {
+                groups.Add(pair.Value);
+            }
+
+            return groups;
+        }
+
+        /// <summary>
+        /// 将弹药稳定内容键转换为带物品图标的三指标叶子项。
+        /// </summary>
+        private static StatisticsListItem CreateAmmoStatisticsItem(
+            StableContentKey content,
+            long supplyEvents,
+            long expectedConsumption,
+            long actualConsumption,
+            out int ammoCategory)
+        {
+            bool resolved = content.TryResolveItemType(out int itemType);
+            StatisticsContentSource source = GetContentSource(content);
+            string name = resolved
+                ? Lang.GetItemNameValue(itemType)
+                : Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Items.MissingItemContent",
+                    content.ToString());
+            Asset<Texture2D> icon = null;
+            ammoCategory = AmmoID.None;
+            bool isNonConsumable = false;
+            if (resolved)
+            {
+                Item sample = ContentSamples.ItemsByType[itemType];
+                ammoCategory = sample?.ammo ?? AmmoID.None;
+                isNonConsumable = sample != null && !sample.consumable;
+                Main.instance.LoadItem(itemType);
+                icon = TextureAssets.Item[itemType];
+            }
+
+            // K3 早期测试数据把非消耗型弹药次数保存在 Events。
+            // 当前口径不再展示或新增该指标，仅在读取时将旧值合并到应耗，
+            // 避免无尽箭袋和无尽火枪弹袋已有的测试记录丢失。
+            long displayedExpectedConsumption = isNonConsumable
+                ? SaturatingAdd(expectedConsumption, supplyEvents)
+                : expectedConsumption;
+
+            return new StatisticsListItem(
+                name,
+                itemType: resolved ? itemType : ItemID.None,
+                icon: icon,
+                events: 0L,
+                units: displayedExpectedConsumption,
+                amount: actualConsumption,
+                source: source,
+                iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
+                content: content,
+                vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
+                    ? itemType
+                    : null,
+                rateUnits: isNonConsumable ? 0L : displayedExpectedConsumption,
+                rateAmount: isNonConsumable ? 0L : actualConsumption);
+        }
+
+        /// <summary>
+        /// 将无可读代表物品的异常弹药类别合并到“其他”，避免生成多个同名空分组。
+        /// </summary>
+        private static int NormalizeAmmoCategory(int ammoCategory)
+        {
+            if (GetAmmoCategoryLocalizationKey(ammoCategory) != null)
+            {
+                return ammoCategory;
+            }
+
+            return ammoCategory > AmmoID.None
+                && ContentSamples.ItemsByType.TryGetValue(ammoCategory, out Item sample)
+                && sample != null
+                && !sample.IsAir
+                    ? ammoCategory
+                    : AmmoID.None;
+        }
+
+        /// <summary>
+        /// 获取原版标准弹药类别的本地化键；模组自定义类别返回空值并使用代表物品命名。
+        /// </summary>
+        private static string GetAmmoCategoryLocalizationKey(int ammoCategory)
+        {
+            string name = null;
+            if (ammoCategory == AmmoID.Arrow) name = "Arrow";
+            else if (ammoCategory == AmmoID.Bullet) name = "Bullet";
+            else if (ammoCategory == AmmoID.Rocket) name = "Rocket";
+            else if (ammoCategory == AmmoID.Dart) name = "Dart";
+            else if (ammoCategory == AmmoID.Solution) name = "Solution";
+            else if (ammoCategory == AmmoID.Gel) name = "Gel";
+            else if (ammoCategory == AmmoID.FallenStar) name = "FallenStar";
+            else if (ammoCategory == AmmoID.Sand) name = "Sand";
+            else if (ammoCategory == AmmoID.Coin) name = "Coin";
+            else if (ammoCategory == AmmoID.Flare) name = "Flare";
+            else if (ammoCategory == AmmoID.Snowball) name = "Snowball";
+            else if (ammoCategory == AmmoID.Stake) name = "Stake";
+            else if (ammoCategory == AmmoID.CandyCorn) name = "CandyCorn";
+            else if (ammoCategory == AmmoID.JackOLantern) name = "JackOLantern";
+            else if (ammoCategory == AmmoID.NailFriendly) name = "Nail";
+            else if (ammoCategory == AmmoID.StyngerBolt) name = "StyngerBolt";
+            else if (ammoCategory == AmmoID.None) name = "Other";
+            return name == null
+                ? null
+                : $"Mods.ComprehensiveStatistics.UI.Items.AmmoCategories.{name}";
+        }
+
+        /// <summary>
+        /// 使用模组自定义弹药类别的代表物品名称生成分组标题。
+        /// </summary>
+        private static string GetCustomAmmoCategoryName(int ammoCategory)
+        {
+            if (ammoCategory > AmmoID.None
+                && ContentSamples.ItemsByType.TryGetValue(ammoCategory, out Item sample)
+                && sample != null
+                && !sample.IsAir)
+            {
+                return Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Items.CustomAmmoCategoryFormat",
+                    sample.Name);
+            }
+
+            return Language.GetTextValue(
+                "Mods.ComprehensiveStatistics.UI.Items.AmmoCategories.Other");
+        }
+
+        /// <summary>
+        /// 获取弹药类别代表物品的图标；无有效代表物品时返回空图标。
+        /// </summary>
+        private static Asset<Texture2D> GetAmmoCategoryIcon(
+            int ammoCategory,
+            out int itemType)
+        {
+            itemType = ItemID.None;
+            if (ammoCategory <= AmmoID.None
+                || !ContentSamples.ItemsByType.TryGetValue(ammoCategory, out Item sample)
+                || sample == null
+                || sample.IsAir)
+            {
+                return null;
+            }
+
+            itemType = ammoCategory;
+            Main.instance.LoadItem(itemType);
+            return TextureAssets.Item[itemType];
+        }
+
+        /// <summary>
+        /// 返回原版弹药类别的固定展示顺序，模组类别随后按本地化名称排列。
+        /// </summary>
+        private static int GetAmmoCategoryOrder(int ammoCategory)
+        {
+            if (ammoCategory == AmmoID.Arrow) return 0;
+            if (ammoCategory == AmmoID.Bullet) return 1;
+            if (ammoCategory == AmmoID.Rocket) return 2;
+            if (ammoCategory == AmmoID.Dart) return 3;
+            if (ammoCategory == AmmoID.Solution) return 4;
+            if (ammoCategory == AmmoID.Gel) return 5;
+            if (ammoCategory == AmmoID.FallenStar) return 6;
+            if (ammoCategory == AmmoID.Sand) return 7;
+            if (ammoCategory == AmmoID.Coin) return 8;
+            if (ammoCategory == AmmoID.Flare) return 9;
+            if (ammoCategory == AmmoID.Snowball) return 10;
+            if (ammoCategory == AmmoID.Stake) return 11;
+            if (ammoCategory == AmmoID.CandyCorn) return 12;
+            if (ammoCategory == AmmoID.JackOLantern) return 13;
+            if (ammoCategory == AmmoID.NailFriendly) return 14;
+            if (ammoCategory == AmmoID.StyngerBolt) return 15;
+            return ammoCategory == AmmoID.None ? int.MaxValue : 1000;
+        }
+
+        /// <summary>
         /// 将同一物品的拾取数量、使用次数与丢弃数量合并到一个三列展示值中。
         /// </summary>
         private static void AddItemMetrics(
@@ -2590,7 +3080,36 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 从一个统计范围创建抛竿次数与统一渔获树。
+        /// 按需挂载鱼饵统计列表，并在显示时刷新当前范围的数据。
+        /// </summary>
+        private void SetBaitTotalsVisible(bool visible)
+        {
+            if (visible == isBaitListAttached)
+            {
+                if (visible)
+                {
+                    UpdateBaitTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+                }
+
+                return;
+            }
+
+            if (visible)
+            {
+                contentPanel.Append(baitList);
+                UpdateBaitTotals(toolbar?.Scope ?? StatisticsViewScope.CharacterCareer);
+            }
+            else
+            {
+                baitList.Remove();
+            }
+
+            isBaitListAttached = visible;
+            contentPanel.Recalculate();
+        }
+
+        /// <summary>
+        /// 从一个统计范围创建抛竿与渔获树。
         /// </summary>
         private static IEnumerable<StatisticsListGroup> CreateFishingGroups(StatisticsData data)
         {
@@ -2635,7 +3154,7 @@ namespace ComprehensiveStatistics.Common.UI
                             iconKind: StatisticsIconKind.None)
                     },
                     nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.Events)
+                    metricDisplay: StatisticsMetricDisplay.FishingEvents)
             };
 
             foreach (FishingLiquidKind liquid in Enum.GetValues(typeof(FishingLiquidKind)))
@@ -2646,7 +3165,7 @@ namespace ComprehensiveStatistics.Common.UI
                     $"Mods.ComprehensiveStatistics.UI.Fishing.Liquids.{liquid}",
                     CreateFishingCatchItems(data, liquid),
                     nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.UnitsAndEventsHideEqual,
+                    metricDisplay: StatisticsMetricDisplay.FishingCatchActivity,
                     iconType: iconItemType,
                     icon: TextureAssets.Item[iconItemType],
                     iconKind: StatisticsIconKind.Item));
@@ -2706,10 +3225,96 @@ namespace ComprehensiveStatistics.Common.UI
                 catches.Add(CreateFishingItemCatchItem(pair.Key, pair.Value));
             }
 
-            catches.AddRange(CreateNpcStatisticsItems(
-                npcCatches,
-                mirrorEventsToUnits: true));
+            foreach (KeyValuePair<StableContentKey, long> pair in npcCatches)
+            {
+                catches.Add(CreateNpcStatisticsItem(
+                    pair.Key,
+                    pair.Value,
+                    rateUnits: 0L,
+                    rateAmount: 0L));
+            }
             return catches;
+        }
+
+        /// <summary>
+        /// 创建鱼饵页的唯一一级分组，列布局与弹药页一致。
+        /// </summary>
+        private static IEnumerable<StatisticsListGroup> CreateBaitGroups(StatisticsData data)
+        {
+            return new[]
+            {
+                new StatisticsListGroup(
+                    "Mods.ComprehensiveStatistics.UI.Bait.UsageGroup",
+                    CreateBaitItems(data),
+                    nameIsLocalizationKey: true,
+                    metricDisplay: StatisticsMetricDisplay.AmmoActivity)
+            };
+        }
+
+        /// <summary>
+        /// 创建按具体物品合并的鱼饵应耗、实耗与消耗率明细。
+        /// </summary>
+        private static List<StatisticsListItem> CreateBaitItems(StatisticsData data)
+        {
+            List<StatisticsListItem> items = new List<StatisticsListItem>();
+            if (data == null)
+            {
+                return items;
+            }
+
+            foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
+            {
+                if (!pair.Key.Content.HasValue
+                    || pair.Value.IsZero
+                    || !string.Equals(
+                        pair.Key.StatisticId,
+                        StatisticKeys.FishingBaitUsageStatisticId,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                StableContentKey content = pair.Key.Content.Value;
+                bool resolved = content.TryResolveItemType(out int itemType);
+                StatisticsContentSource source = GetContentSource(content);
+                string name;
+                Asset<Texture2D> icon = null;
+                if (resolved)
+                {
+                    Item sample = ContentSamples.ItemsByType[itemType];
+                    name = Language.GetTextValue(
+                        "Mods.ComprehensiveStatistics.UI.Bait.NameFormat",
+                        Lang.GetItemNameValue(itemType),
+                        Math.Max(0, sample?.bait ?? 0));
+                    Main.instance.LoadItem(itemType);
+                    icon = TextureAssets.Item[itemType];
+                }
+                else
+                {
+                    name = Language.GetTextValue(
+                        "Mods.ComprehensiveStatistics.UI.Bait.MissingItemContent",
+                        content.ToString());
+                }
+
+                items.Add(new StatisticsListItem(
+                    name,
+                    itemType: resolved ? itemType : ItemID.None,
+                    icon: icon,
+                    events: pair.Value.Events,
+                    units: pair.Value.Units,
+                    amount: pair.Value.Amount,
+                    source: source,
+                    iconKind: resolved
+                        ? StatisticsIconKind.Item
+                        : StatisticsIconKind.None,
+                    content: content,
+                    vanillaContentId: resolved
+                        && source == StatisticsContentSource.Vanilla
+                            ? itemType
+                            : null));
+            }
+
+            return items;
         }
 
         /// <summary>
@@ -2757,7 +3362,9 @@ namespace ComprehensiveStatistics.Common.UI
                 content: content,
                 vanillaContentId: resolved && source == StatisticsContentSource.Vanilla
                     ? itemType
-                    : null);
+                    : null,
+                rateUnits: 0L,
+                rateAmount: 0L);
         }
 
         /// <summary>

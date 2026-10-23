@@ -236,6 +236,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                         entry.TotalEvents,
                         entry.TotalUnits,
                         entry.TotalAmount,
+                        entry.TotalRateUnits,
+                        entry.TotalRateAmount,
                         group.IconType,
                         group.Icon,
                         group.IconKind,
@@ -413,7 +415,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 result.AddTotals(
                     filteredChild.TotalEvents,
                     filteredChild.TotalUnits,
-                    filteredChild.TotalAmount);
+                    filteredChild.TotalAmount,
+                    filteredChild.TotalRateUnits,
+                    filteredChild.TotalRateAmount);
             }
 
             foreach (StatisticsListItem item in group.Items)
@@ -424,7 +428,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 }
 
                 result.Items.Add(item);
-                result.AddTotals(item.Events, item.Units, item.Amount);
+                result.AddTotals(
+                    item.Events,
+                    item.Units,
+                    item.Amount,
+                    item.RateUnits,
+                    item.RateAmount);
             }
 
             if (sortDirection == StatisticsListSortDirection.None
@@ -459,6 +468,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 filteredGroup.TotalEvents,
                 filteredGroup.TotalUnits,
                 filteredGroup.TotalAmount,
+                filteredGroup.TotalRateUnits,
+                filteredGroup.TotalRateAmount,
                 depth,
                 resolvedMetricDisplay));
             if (!filteredGroup.Group.IsExpanded || !filteredGroup.Group.ShowChildren)
@@ -573,10 +584,14 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 left.Events,
                 left.Units,
                 left.Amount,
+                left.RateUnits,
+                left.RateAmount,
                 right.Name,
                 right.Events,
                 right.Units,
-                right.Amount);
+                right.Amount,
+                right.RateUnits,
+                right.RateAmount);
         }
 
         /// <summary>
@@ -587,15 +602,43 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long leftEvents,
             long leftUnits,
             long leftAmount,
+            long leftRateUnits,
+            long leftRateAmount,
             string rightName,
             long rightEvents,
             long rightUnits,
-            long rightAmount)
+            long rightAmount,
+            long rightRateUnits,
+            long rightRateAmount)
         {
-            int result = sortColumn == StatisticsListSortColumn.Name
-                ? string.Compare(leftName, rightName, StringComparison.CurrentCulture)
-                : GetSortValue(leftEvents, leftUnits, leftAmount, sortColumn).CompareTo(
+            int result;
+            if (sortColumn == StatisticsListSortColumn.Name)
+            {
+                result = string.Compare(leftName, rightName, StringComparison.CurrentCulture);
+            }
+            else if (sortColumn == StatisticsListSortColumn.Rate)
+            {
+                bool leftHasRate = leftRateUnits > 0L;
+                bool rightHasRate = rightRateUnits > 0L;
+                if (leftHasRate != rightHasRate)
+                {
+                    // 不可计算比率的“—”无论升序或降序都固定排在有值条目之后。
+                    return leftHasRate ? -1 : 1;
+                }
+
+                double leftRate = leftHasRate
+                    ? (double)leftRateAmount / leftRateUnits
+                    : 0d;
+                double rightRate = rightHasRate
+                    ? (double)rightRateAmount / rightRateUnits
+                    : 0d;
+                result = leftRate.CompareTo(rightRate);
+            }
+            else
+            {
+                result = GetSortValue(leftEvents, leftUnits, leftAmount, sortColumn).CompareTo(
                     GetSortValue(rightEvents, rightUnits, rightAmount, sortColumn));
+            }
             if (sortDirection == StatisticsListSortDirection.Descending)
             {
                 result = -result;
@@ -634,7 +677,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             float nameRightReserve = metricDisplay switch
             {
                 StatisticsMetricDisplay.Mixed => 254f,
+                StatisticsMetricDisplay.WiringActivity => 254f,
                 StatisticsMetricDisplay.ItemActivity => 370f,
+                StatisticsMetricDisplay.AmmoActivity => 370f,
+                StatisticsMetricDisplay.FishingActivity => 254f,
+                StatisticsMetricDisplay.FishingEvents => 254f,
+                StatisticsMetricDisplay.FishingCatchActivity => 254f,
                 StatisticsMetricDisplay.KillOutcomes => 370f,
                 StatisticsMetricDisplay.EconomyTransactions => 370f,
                 _ => 160f
@@ -665,6 +713,25 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 return;
             }
 
+            if (metricDisplay == StatisticsMetricDisplay.WiringActivity)
+            {
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.WiringPlacedColumn",
+                    StatisticsListSortColumn.Events,
+                    leftPixels: -254f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Blocks.WiringRemovedColumn",
+                    StatisticsListSortColumn.Units,
+                    leftPixels: -138f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                return;
+            }
+
             if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
             {
                 AddColumnHeader(
@@ -684,6 +751,51 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 AddColumnHeader(
                     "Mods.ComprehensiveStatistics.UI.Items.DiscardUnitsColumn",
                     StatisticsListSortColumn.Amount,
+                    leftPixels: -138f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.AmmoActivity)
+            {
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Items.AmmoExpectedUnitsColumn",
+                    StatisticsListSortColumn.Units,
+                    leftPixels: -370f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Items.AmmoConsumedUnitsColumn",
+                    StatisticsListSortColumn.Amount,
+                    leftPixels: -254f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Items.AmmoConsumptionRateColumn",
+                    StatisticsListSortColumn.Rate,
+                    leftPixels: -138f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.FishingActivity)
+            {
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Fishing.UnitsColumn",
+                    StatisticsListSortColumn.Units,
+                    leftPixels: -254f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Fishing.EventsColumn",
+                    StatisticsListSortColumn.Events,
                     leftPixels: -138f,
                     widthPixels: 116f,
                     widthPercent: 0f,
@@ -951,6 +1063,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             internal long Amount => Group?.TotalAmount ?? Item.Amount;
 
+            internal long RateUnits => Group?.TotalRateUnits ?? Item.RateUnits;
+
+            internal long RateAmount => Group?.TotalRateAmount ?? Item.RateAmount;
+
             /// <summary>
             /// 创建携带筛选后合计的分组排序节点。
             /// </summary>
@@ -1069,14 +1185,25 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             internal long TotalAmount { get; private set; }
 
+            internal long TotalRateUnits { get; private set; }
+
+            internal long TotalRateAmount { get; private set; }
+
             /// <summary>
             /// 将一个可见子节点的指标累加到筛选后合计。
             /// </summary>
-            internal void AddTotals(long events, long units, long amount)
+            internal void AddTotals(
+                long events,
+                long units,
+                long amount,
+                long rateUnits,
+                long rateAmount)
             {
                 TotalEvents = SaturatingAdd(TotalEvents, events);
                 TotalUnits = SaturatingAdd(TotalUnits, units);
                 TotalAmount = SaturatingAdd(TotalAmount, amount);
+                TotalRateUnits = SaturatingAdd(TotalRateUnits, rateUnits);
+                TotalRateAmount = SaturatingAdd(TotalRateAmount, rateAmount);
             }
         }
 
@@ -1095,6 +1222,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 long totalEvents,
                 long totalUnits,
                 long totalAmount,
+                long totalRateUnits,
+                long totalRateAmount,
                 int depth,
                 StatisticsMetricDisplay metricDisplay)
             {
@@ -1103,6 +1232,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 TotalEvents = totalEvents;
                 TotalUnits = totalUnits;
                 TotalAmount = totalAmount;
+                TotalRateUnits = totalRateUnits;
+                TotalRateAmount = totalRateAmount;
                 Depth = depth;
                 MetricDisplay = metricDisplay;
             }
@@ -1116,6 +1247,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             internal long TotalUnits { get; }
 
             internal long TotalAmount { get; }
+
+            internal long TotalRateUnits { get; }
+
+            internal long TotalRateAmount { get; }
 
             internal int Depth { get; }
 
@@ -1131,6 +1266,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 long totalEvents,
                 long totalUnits,
                 long totalAmount,
+                long totalRateUnits,
+                long totalRateAmount,
                 int depth,
                 StatisticsMetricDisplay metricDisplay)
             {
@@ -1140,6 +1277,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     totalEvents,
                     totalUnits,
                     totalAmount,
+                    totalRateUnits,
+                    totalRateAmount,
                     depth,
                     metricDisplay);
             }
@@ -1158,6 +1297,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     0L,
                     0L,
                     0L,
+                    item.RateUnits,
+                    item.RateAmount,
                     depth,
                     metricDisplay);
             }

@@ -51,6 +51,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private readonly UIText eventsText;
         private readonly UIText unitsText;
         private readonly UIText valueText;
+        private readonly UIText rateText;
         private readonly UIText[] economyCoinTexts = new UIText[4];
         private readonly long[] economyCoinValues = new long[4];
         private Action clickAction;
@@ -108,6 +109,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             valueText.VAlign = 0.5f;
             Append(valueText);
 
+            rateText = new UIText(string.Empty, 0.76f);
+            rateText.Left.Set(-4f, 0f);
+            rateText.HAlign = 1f;
+            rateText.VAlign = 0.5f;
+            Append(rateText);
+
             for (int index = 0; index < economyCoinTexts.Length; index++)
             {
                 UIText coinText = new UIText(string.Empty, 0.76f);
@@ -129,6 +136,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long totalEvents,
             long totalUnits,
             long totalAmount,
+            long totalRateUnits,
+            long totalRateAmount,
             int groupIconType,
             Asset<Texture2D> groupIcon,
             StatisticsIconKind groupIconKind,
@@ -164,6 +173,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 totalUnits,
                 totalEvents,
                 totalAmount,
+                totalRateUnits,
+                totalRateAmount,
                 metricDisplay,
                 amountIconType,
                 amountIcon);
@@ -171,6 +182,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 totalUnits,
                 totalEvents,
                 totalAmount,
+                totalRateUnits,
                 metricDisplay,
                 new Color(238, 241, 255),
                 DimmedGroupMetricColor);
@@ -205,6 +217,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 item.Units,
                 item.Events,
                 item.Amount,
+                item.RateUnits,
+                item.RateAmount,
                 metricDisplay,
                 item.AmountIconType,
                 item.AmountIcon);
@@ -212,6 +226,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 item.Units,
                 item.Events,
                 item.Amount,
+                item.RateUnits,
                 metricDisplay,
                 new Color(190, 200, 225),
                 DimmedItemMetricColor);
@@ -231,6 +246,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             eventsText.SetText(string.Empty);
             unitsText.SetText(string.Empty);
             valueText.SetText(string.Empty);
+            rateText.SetText(string.Empty);
             HideEconomyCoins();
             icon = null;
             tileIconLayout = null;
@@ -534,7 +550,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             float rightReserve = metricDisplay switch
             {
                 StatisticsMetricDisplay.Mixed => MixedNameRightReserve,
+                StatisticsMetricDisplay.WiringActivity => MixedNameRightReserve,
                 StatisticsMetricDisplay.ItemActivity => ItemActivityNameRightReserve,
+                StatisticsMetricDisplay.AmmoActivity => ItemActivityNameRightReserve,
+                StatisticsMetricDisplay.FishingActivity => MixedNameRightReserve,
+                StatisticsMetricDisplay.FishingEvents => MixedNameRightReserve,
+                StatisticsMetricDisplay.FishingCatchActivity => MixedNameRightReserve,
                 StatisticsMetricDisplay.KillOutcomes => ItemActivityNameRightReserve,
                 StatisticsMetricDisplay.EconomyTransactions => ItemActivityNameRightReserve,
                 _ => NameRightReserve
@@ -543,23 +564,61 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 按页面口径设置一至三个数值列。
+        /// 按页面口径设置一至四个数值列。
         /// </summary>
         private void SetMetrics(
             long units,
             long events,
             long amount,
+            long rateUnits,
+            long rateAmount,
             StatisticsMetricDisplay metricDisplay,
             int amountIconType,
             Asset<Texture2D> amountIcon)
         {
             HideEconomyCoins();
+            eventsText.Left.Set(-MixedEventsRight, 0f);
+            unitsText.Left.Set(-ItemActivityUseEventsRight, 0f);
+            valueText.Left.Set(-4f, 0f);
+            rateText.SetText(string.Empty);
             if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
             {
                 eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
                 eventsText.SetText(units.ToString("N0"));
                 unitsText.SetText(events.ToString("N0"));
                 valueText.SetText(amount.ToString("N0"));
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.AmmoActivity)
+            {
+                eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
+                unitsText.Left.Set(-ItemActivityUseEventsRight, 0f);
+                eventsText.SetText(units.ToString("N0"));
+                unitsText.SetText(amount.ToString("N0"));
+                valueText.SetText(string.Empty);
+                rateText.SetText(rateUnits <= 0L
+                    ? "—"
+                    : $"{(double)rateAmount / rateUnits:P1}");
+                return;
+            }
+
+            if (metricDisplay == StatisticsMetricDisplay.FishingActivity
+                || metricDisplay == StatisticsMetricDisplay.FishingEvents
+                || metricDisplay == StatisticsMetricDisplay.FishingCatchActivity)
+            {
+                // 钓鱼页的左、右数值列分别是数量和次数。
+                // 数量与次数相等时省略重复的数量；抛竿结果始终只显示次数。
+                eventsText.Left.Set(-MixedEventsRight, 0f);
+                eventsText.SetText(
+                    metricDisplay == StatisticsMetricDisplay.FishingCatchActivity
+                        && units > 0L
+                        && units != events
+                            ? units.ToString("N0")
+                            : string.Empty);
+                unitsText.SetText(string.Empty);
+                valueText.SetText(events.ToString("N0"));
+                rateText.SetText(string.Empty);
                 return;
             }
 
@@ -589,6 +648,15 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 return;
             }
 
+            if (metricDisplay == StatisticsMetricDisplay.WiringActivity)
+            {
+                eventsText.Left.Set(-MixedEventsRight, 0f);
+                eventsText.SetText(events.ToString("N0"));
+                unitsText.SetText(string.Empty);
+                valueText.SetText(units.ToString("N0"));
+                return;
+            }
+
             eventsText.Left.Set(-MixedEventsRight, 0f);
             unitsText.SetText(string.Empty);
             if (metricDisplay == StatisticsMetricDisplay.Mixed)
@@ -609,6 +677,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long units,
             long events,
             long amount,
+            long rateUnits,
             StatisticsMetricDisplay metricDisplay,
             Color normalColor,
             Color dimmedColor)
@@ -616,12 +685,29 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             eventsText.TextColor = normalColor;
             unitsText.TextColor = normalColor;
             valueText.TextColor = normalColor;
+            rateText.TextColor = normalColor;
 
             if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
             {
                 eventsText.TextColor = units == 0L ? dimmedColor : normalColor;
                 unitsText.TextColor = events == 0L ? dimmedColor : normalColor;
                 valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
+            }
+            else if (metricDisplay == StatisticsMetricDisplay.AmmoActivity)
+            {
+                eventsText.TextColor = units == 0L ? dimmedColor : normalColor;
+                unitsText.TextColor = amount == 0L ? dimmedColor : normalColor;
+                valueText.TextColor = dimmedColor;
+                rateText.TextColor = rateUnits == 0L ? dimmedColor : normalColor;
+            }
+            else if (metricDisplay == StatisticsMetricDisplay.FishingActivity
+                || metricDisplay == StatisticsMetricDisplay.FishingEvents
+                || metricDisplay == StatisticsMetricDisplay.FishingCatchActivity)
+            {
+                eventsText.TextColor = units == 0L ? dimmedColor : normalColor;
+                unitsText.TextColor = dimmedColor;
+                valueText.TextColor = events == 0L ? dimmedColor : normalColor;
+                rateText.TextColor = dimmedColor;
             }
             else if (metricDisplay == StatisticsMetricDisplay.KillOutcomes)
             {
@@ -646,6 +732,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 eventsText.TextColor = events == 0L ? dimmedColor : normalColor;
                 valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
+            }
+            else if (metricDisplay == StatisticsMetricDisplay.WiringActivity)
+            {
+                eventsText.TextColor = events == 0L ? dimmedColor : normalColor;
+                valueText.TextColor = units == 0L ? dimmedColor : normalColor;
             }
         }
 

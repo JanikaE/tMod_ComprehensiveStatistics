@@ -83,6 +83,9 @@ namespace ComprehensiveStatistics.Common.Systems
             // 折叠和排序只属于一次窗口会话；切换 Tab 时保留，重新打开时恢复默认。
             statisticsWindowState.ResetTransientViewState();
             statisticsWindowInterface.SetState(statisticsWindowState);
+            // UIState 会在模组加载阶段预激活；只有玩家实际打开窗口后，ModPlayer
+            // 数组才保证完成初始化，此时再允许页面读取角色统计。
+            statisticsWindowState.BeginRuntimeStatisticsAccess();
             SoundEngine.PlaySound(SoundID.MenuOpen);
         }
 
@@ -96,6 +99,7 @@ namespace ComprehensiveStatistics.Common.Systems
                 return;
             }
 
+            statisticsWindowState.EndRuntimeStatisticsAccess();
             statisticsWindowInterface.SetState(null);
 
             if (playSound)

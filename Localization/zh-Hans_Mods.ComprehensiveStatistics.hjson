@@ -16,6 +16,9 @@ UI: {
 	Blocks: {
 		SolidTilesGroup: 物块
 		BackgroundWallsGroup: 背景墙
+		WiringComponentsGroup: 电线与制动器
+		WiringPlacedColumn: 放置数量
+		WiringRemovedColumn: 拆除数量
 		MissingTileContent: 缺失物块：{0}
 		MissingWallContent: 缺失背景墙：{0}
 		MissingTileObjectContent: 缺失家具或多格物体：{0}
@@ -55,6 +58,14 @@ UI: {
 			Lava: 熔岩洞穴墙
 			Rocks: 岩石洞穴墙
 		}
+
+		WiringComponents: {
+			RedWire: 红电线
+			BlueWire: 蓝电线
+			GreenWire: 绿电线
+			YellowWire: 黄电线
+			Actuator: 制动器
+		}
 	}
 
 	Survival: {
@@ -91,7 +102,31 @@ UI: {
 		PickupUnitsColumn: 拾取数量
 		UseEventsColumn: 使用次数
 		DiscardUnitsColumn: 丢弃数量
+		AmmoExpectedUnitsColumn: 应耗数量
+		AmmoConsumedUnitsColumn: 实耗数量
+		AmmoConsumptionRateColumn: 消耗率
+		CustomAmmoCategoryFormat: "{0}类弹药"
 		MissingItemContent: 缺失内容：{0}
+
+		AmmoCategories: {
+			Arrow: 箭
+			Bullet: 子弹
+			Rocket: 火箭
+			Dart: 飞镖
+			Solution: 溶液
+			Gel: 凝胶
+			FallenStar: 坠落之星
+			Sand: 沙块
+			Coin: 钱币
+			Flare: 信号弹
+			Snowball: 雪球
+			Stake: 木桩
+			CandyCorn: 糖果玉米
+			JackOLantern: 爆炸南瓜灯
+			Nail: 钉子
+			StyngerBolt: 尖桩弹
+			Other: 其他或未分类
+		}
 	}
 
 	Interactions: {
@@ -147,6 +182,8 @@ UI: {
 
 	Fishing: {
 		CastsGroup: 抛竿次数
+		EventsColumn: 次数
+		UnitsColumn: 数量
 		SuccessfulCatches: 成功上钩
 		EmptyReels: 主动收杆（未上钩）
 		InterruptedCasts: 其他中断
@@ -157,6 +194,12 @@ UI: {
 			Honey: 蜂蜜
 			Lava: 熔岩
 		}
+	}
+
+	Bait: {
+		UsageGroup: 鱼饵使用
+		NameFormat: "{0}（鱼饵力 {1}%）"
+		MissingItemContent: 缺失内容：{0}
 	}
 
 	Movement: {
@@ -178,19 +221,19 @@ UI: {
 	}
 
 	Tabs: {
-		Overview: {
-			Title: 综合概览
-			Description: 这里将显示各类统计的代表性总计和常用摘要。
-		}
-
 		Blocks: {
 			Title: 物块
-			Description: 这里将显示物块挖掘和背景墙拆除统计；家具与多格物体归入物块。
+			Description: 这里将显示物块、背景墙以及电线与制动器的拆除或放置统计；家具与多格物体归入物块。
 		}
 
 		Items: {
 			Title: 物品
 			Description: 这里将显示物品拾取、使用与丢弃统计。
+		}
+
+		Ammo: {
+			Title: 弹药
+			Description: 这里将按弹药类别和具体物品显示应耗数量、实际消耗与消耗率。
 		}
 
 		Interactions: {
@@ -211,6 +254,11 @@ UI: {
 		Fishing: {
 			Title: 钓鱼
 			Description: 这里将显示抛竿、上钩、空竿或中断以及渔获统计。
+		}
+
+		Bait: {
+			Title: 鱼饵
+			Description: 这里将按具体鱼饵显示应耗数量、实际消耗与消耗率。
 		}
 
 		Movement: {

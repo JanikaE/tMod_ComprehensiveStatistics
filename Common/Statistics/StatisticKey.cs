@@ -77,15 +77,32 @@ namespace ComprehensiveStatistics.Common.Statistics
     }
 
     /// <summary>
+    /// 原版格位布线组件；枚举顺序同时作为物块页的固定展示顺序。
+    /// </summary>
+    internal enum WiringComponentKind
+    {
+        RedWire,
+        BlueWire,
+        GreenWire,
+        YellowWire,
+        Actuator
+    }
+
+    /// <summary>
     /// 集中定义正式统计键，使采集、存档和 UI 使用同一稳定标识。
     /// </summary>
     internal static class StatisticKeys
     {
         internal const string ItemPickupStatisticId = "items/pickups";
+        internal const string TilePlacedStatisticId = "blocks/tiles-placed";
         internal const string TileMinedStatisticId = "blocks/tiles-mined";
+        internal const string WallPlacedStatisticId = "blocks/walls-placed";
         internal const string WallRemovedStatisticId = "blocks/walls-removed";
+        internal const string TileObjectPlacedStatisticId = "blocks/tile-objects-placed";
         internal const string TileObjectRemovedStatisticId = "blocks/tile-objects-removed";
+        internal const string WiringComponentActivityStatisticId = "blocks/wiring-components";
         internal const string ItemUseStatisticId = "items/uses";
+        internal const string AmmoUsageStatisticId = "items/ammo-usage";
         internal const string ItemDiscardStatisticId = "items/discards";
         internal const string ItemPurchaseStatisticId = "economy/purchases";
         internal const string SpecialCurrencyPurchaseStatisticId =
@@ -100,6 +117,7 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string NpcWorldDeathStatisticId = "npcs/world-deaths";
         internal const string FishingItemCatchStatisticId = "fishing/catches/items";
         internal const string FishingNpcCatchStatisticId = "fishing/catches/npcs";
+        internal const string FishingBaitUsageStatisticId = "fishing/bait-usage";
         internal const string FacilityInteractionStatisticId = "interactions/facilities";
 
         internal static readonly StatisticKey FishingSuccessfulCatches =
@@ -176,12 +194,37 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string ContinuousDamageDebuffDeathStatisticId =
             "survival/player-deaths/continuous/debuff";
 
+        private static readonly StableContentKey[] WiringComponentContents =
+        {
+            new StableContentKey("Terraria", "WireRed"),
+            new StableContentKey("Terraria", "WireBlue"),
+            new StableContentKey("Terraria", "WireGreen"),
+            new StableContentKey("Terraria", "WireYellow"),
+            new StableContentKey("Terraria", "Actuator")
+        };
+
+        /// <summary>
+        /// 获取指定实体物块对应的成功放置统计键。
+        /// </summary>
+        internal static StatisticKey GetPlacedTileKey(StableContentKey content)
+        {
+            return new StatisticKey(TilePlacedStatisticId, content);
+        }
+
         /// <summary>
         /// 获取指定实体物块对应的成功挖掘统计键。
         /// </summary>
         internal static StatisticKey GetMinedTileKey(StableContentKey content)
         {
             return new StatisticKey(TileMinedStatisticId, content);
+        }
+
+        /// <summary>
+        /// 获取指定背景墙对应的成功放置统计键。
+        /// </summary>
+        internal static StatisticKey GetPlacedWallKey(StableContentKey content)
+        {
+            return new StatisticKey(WallPlacedStatisticId, content);
         }
 
         /// <summary>
@@ -193,6 +236,16 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 获取指定物块内容与放置样式对应的家具或多格物体放置统计键。
+        /// </summary>
+        internal static StatisticKey GetPlacedTileObjectKey(
+            StableContentKey content,
+            string style)
+        {
+            return new StatisticKey(TileObjectPlacedStatisticId, content, style);
+        }
+
+        /// <summary>
         /// 获取指定物块内容与放置样式对应的家具或多格物体拆除统计键。
         /// </summary>
         internal static StatisticKey GetRemovedTileObjectKey(
@@ -200,6 +253,31 @@ namespace ComprehensiveStatistics.Common.Statistics
             string style)
         {
             return new StatisticKey(TileObjectRemovedStatisticId, content, style);
+        }
+
+        /// <summary>
+        /// 获取指定格位布线组件的放置与拆除共用统计键。
+        /// Events 保存放置数量，Units 保存拆除数量，使两列共享同一稳定组件条目。
+        /// </summary>
+        internal static StatisticKey GetWiringComponentActivityKey(WiringComponentKind component)
+        {
+            return new StatisticKey(
+                WiringComponentActivityStatisticId,
+                GetWiringComponentContent(component));
+        }
+
+        /// <summary>
+        /// 获取布线组件不依赖物品或物块运行时 ID 的预留稳定内容键。
+        /// </summary>
+        internal static StableContentKey GetWiringComponentContent(WiringComponentKind component)
+        {
+            int index = (int)component;
+            if (index < 0 || index >= WiringComponentContents.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(component));
+            }
+
+            return WiringComponentContents[index];
         }
 
         /// <summary>
@@ -216,6 +294,14 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal static StatisticKey GetItemUseKey(StableContentKey content)
         {
             return new StatisticKey(ItemUseStatisticId, content);
+        }
+
+        /// <summary>
+        /// 获取指定具体弹药物品对应的应耗与实际消耗统计键。
+        /// </summary>
+        internal static StatisticKey GetAmmoUsageKey(StableContentKey content)
+        {
+            return new StatisticKey(AmmoUsageStatisticId, content);
         }
 
         /// <summary>
@@ -380,6 +466,14 @@ namespace ComprehensiveStatistics.Common.Statistics
                 FishingNpcCatchStatisticId,
                 npcContent,
                 liquid.ToString());
+        }
+
+        /// <summary>
+        /// 获取指定具体鱼饵物品对应的使用与消耗统计键。
+        /// </summary>
+        internal static StatisticKey GetFishingBaitUsageKey(StableContentKey baitContent)
+        {
+            return new StatisticKey(FishingBaitUsageStatisticId, baitContent);
         }
 
         /// <summary>
