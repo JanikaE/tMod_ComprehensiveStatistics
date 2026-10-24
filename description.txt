@@ -1,1 +1,1 @@
-Modify this file with a description of your mod.
+Tracks detailed character and world statistics for blocks, items, ammunition, interactions, NPC kills, economy, fishing, bait, movement, and survival. Includes searchable and sortable tables, per-world character views, multiplayer-safe world statistics, and Simplified Chinese and English localization.

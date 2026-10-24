@@ -2,7 +2,6 @@ Keybinds.ToggleStatistics.DisplayName: 打开或关闭统计窗口
 
 UI: {
 	WindowTitle: 综合统计
-	EmptyWindow: 统计分类将在下一开发步骤中加入。
 	OpenButtonTooltip:
 		'''
 		综合统计
@@ -11,7 +10,6 @@ UI: {
 	CloseButtonTooltip: 关闭
 	StatisticsStartedAt: 统计开始时间：{0:g}
 	StatisticsStartUnavailable: 尚未进入世界，无可用的统计开始时间。
-	B2PersistenceTestCounter: B2 临时测试 · 进入世界次数：{0:N0}
 
 	Blocks: {
 		SolidTilesGroup: 物块
@@ -83,7 +81,7 @@ UI: {
 		UnknownContinuousLifeLoss: 未知
 		UnclassifiedNpcDamage: 其他或未分类
 		MissingNpcContent: 缺失内容：{0}
-		MissingBuffContent: 缺失 Debuff：{0}
+		MissingBuffContent: 缺失减益：{0}
 
 		DirectDamageSources: {
 			NpcContact: NPC 接触伤害
@@ -223,52 +221,52 @@ UI: {
 	Tabs: {
 		Blocks: {
 			Title: 物块
-			Description: 这里将显示物块、背景墙以及电线与制动器的拆除或放置统计；家具与多格物体归入物块。
+			Description: 物块、背景墙、电线、制动器和家具的放置与拆除。
 		}
 
 		Items: {
 			Title: 物品
-			Description: 这里将显示物品拾取、使用与丢弃统计。
+			Description: 物品的拾取、使用与丢弃。
 		}
 
 		Ammo: {
 			Title: 弹药
-			Description: 这里将按弹药类别和具体物品显示应耗数量、实际消耗与消耗率。
+			Description: 按类别和物品统计弹药的应消耗量与实际消耗量。
 		}
 
 		Interactions: {
 			Title: 交互
-			Description: 这里将显示 NPC 对话及按钮，以及增益站、家具、容器、晶塔、钟和机关的交互统计。
+			Description: NPC 对话，以及与设施和机关的交互。
 		}
 
 		Kills: {
 			Title: 击杀
-			Description: 这里将显示角色对 NPC 的最终击杀与协助，以及当前世界的 NPC 实际死亡统计。
+			Description: 角色击杀与助攻，以及当前世界的 NPC 死亡。
 		}
 
 		Economy: {
 			Title: 经济
-			Description: 这里将显示买入、卖出、护士治疗、重铸和货币流量统计。
+			Description: 购买、出售、治疗、重铸和货币流动。
 		}
 
 		Fishing: {
 			Title: 钓鱼
-			Description: 这里将显示抛竿、上钩、空竿或中断以及渔获统计。
+			Description: 抛竿、成功钓获、中断和渔获明细。
 		}
 
 		Bait: {
 			Title: 鱼饵
-			Description: 这里将按具体鱼饵显示应耗数量、实际消耗与消耗率。
+			Description: 按物品统计鱼饵的应消耗量与实际消耗量。
 		}
 
 		Movement: {
 			Title: 移动
-			Description: 这里将显示总移动距离以及各类移动方式的距离统计。
+			Description: 总移动距离以及各类移动方式的距离。
 		}
 
 		Survival: {
 			Title: 生存
-			Description: 这里将显示死亡、掉血和伤害来源统计。
+			Description: 死亡、损失生命值和伤害来源。
 		}
 	}
 

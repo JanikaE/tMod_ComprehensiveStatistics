@@ -1,3 +1,3 @@
-displayName = Comprehensive Statistics综合统计
+displayName = Comprehensive Statistics 综合统计
 author = Janika
-version = 0.1
+version = 0.0.1

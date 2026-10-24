@@ -21,6 +21,11 @@ namespace ComprehensiveStatistics.Common.Players
         // 显式的 teleportTime 检查负责排除短距离传送，此阈值是兼容未知传送实现的兜底。
         private const float MaximumTrackedMovementPerTick = 64f;
 
+        // 高频指标最多延迟一秒写入长期字典；打开 UI、保存角色和切换世界前都会强制刷新。
+        private const int HighFrequencyFlushIntervalTicks = 60;
+        private const int HighFrequencyMaximumPendingEntries = 256;
+        private const ulong FishingReconciliationIntervalTicks = 15UL;
+
         // 顺序是设计规定的归因优先级；静态数组避免在逐帧热路径中反复分配。
         private static readonly MovementModeKind[] SpecialMovementModePriority =
         {
@@ -48,6 +53,9 @@ namespace ComprehensiveStatistics.Common.Players
         private MovementModeKind preMovementMode;
         private StableContentKey? preMovementContent;
         private double pendingMovementPixels;
+        private readonly Dictionary<StatisticKey, StatisticMetrics> pendingHighFrequencyStatistics =
+            new Dictionary<StatisticKey, StatisticMetrics>();
+        private int pendingHighFrequencyTicks;
         private bool hasActiveChanneledItemUse;
         private int activeChanneledItemType;
         private int activeChanneledAltFunctionUse;
@@ -77,10 +85,47 @@ namespace ComprehensiveStatistics.Common.Players
         private bool activeFishingBaitDecisionObserved;
         private long activeFishingBaitExpectedConsumption;
         private long activeFishingBaitActualConsumption;
+        private ulong nextFishingReconciliationUpdate;
 
         internal CharacterStatisticsData Data { get; private set; }
 
         internal StatisticsData CurrentWorldSlice => currentWorldSlice;
+
+        /// <summary>
+        /// 取得指定 Tab 在人物生涯或当前世界范围内保存的分组展开状态。
+        /// </summary>
+        internal IReadOnlyDictionary<string, bool> GetSavedExpansionStates(
+            string tabKey,
+            bool currentWorld)
+        {
+            if (currentWorld)
+            {
+                EnsureCurrentWorldSlice();
+            }
+
+            return Data.ExpansionStates.GetTabState(
+                tabKey,
+                currentWorld ? currentWorldId : null);
+        }
+
+        /// <summary>
+        /// 替换指定 Tab 在人物生涯或当前世界范围内保存的完整分组展开状态。
+        /// </summary>
+        internal void SaveExpansionStates(
+            string tabKey,
+            bool currentWorld,
+            IReadOnlyDictionary<string, bool> states)
+        {
+            if (currentWorld)
+            {
+                EnsureCurrentWorldSlice();
+            }
+
+            Data.ExpansionStates.ReplaceTabState(
+                tabKey,
+                currentWorld ? currentWorldId : null,
+                states);
+        }
 
         public override void Initialize()
         {
@@ -91,6 +136,8 @@ namespace ComprehensiveStatistics.Common.Players
             hasLifeSnapshot = false;
             previousLifeSnapshot = 0;
             pendingDirectLifeLost = 0L;
+            pendingHighFrequencyStatistics.Clear();
+            pendingHighFrequencyTicks = 0;
             ClearPendingDeathSources();
             ResetMovementTracking();
             ResetItemUseTracking();
@@ -105,6 +152,8 @@ namespace ComprehensiveStatistics.Common.Players
 
         public override void OnEnterWorld()
         {
+            // 若同一 ModPlayer 实例跨世界复用，先把上一世界尚未到期的批次写回旧切片。
+            FlushPendingStatistics();
             EnsureCurrentWorldSlice();
             hasRecordedCurrentDeath = false;
             ResetLifeLossTracking();
@@ -117,16 +166,11 @@ namespace ComprehensiveStatistics.Common.Players
             pendingPickupObservations.Clear();
             trackedTalkingNpcIndex = -1;
             ResetFishingTracking();
-
-            // B2 临时验收计数只由所属客户端写入，进入世界一次即同时增长两个角色范围。
-            if (IsOwnedByLocalClient)
-            {
-                Record(InternalStatisticKeys.B2WorldEntries, new StatisticMetrics(events: 1L));
-            }
         }
 
         public override void SaveData(TagCompound tag)
         {
+            FlushPendingStatistics();
             tag[StatisticsDataSerializer.PlayerTagKey] = StatisticsDataSerializer.Serialize(Data);
         }
 
@@ -151,6 +195,8 @@ namespace ComprehensiveStatistics.Common.Players
             hasLifeSnapshot = false;
             previousLifeSnapshot = 0;
             pendingDirectLifeLost = 0L;
+            pendingHighFrequencyStatistics.Clear();
+            pendingHighFrequencyTicks = 0;
             ClearPendingDeathSources();
             ResetMovementTracking();
             ResetItemUseTracking();
@@ -275,6 +321,8 @@ namespace ComprehensiveStatistics.Common.Players
                 activeFishingCastSucceeded = false;
                 activeFishingCastWasReeled = false;
                 BeginFishingBaitSession();
+                nextFishingReconciliationUpdate =
+                    currentUpdate + FishingReconciliationIntervalTicks;
                 trackedFishingBobberIndices.Clear();
                 trackedFishingBobberIndices.Add(bobber.whoAmI);
                 Record(StatisticKeys.FishingCasts, new StatisticMetrics(events: 1L));
@@ -433,6 +481,7 @@ namespace ComprehensiveStatistics.Common.Players
                 ReconcileFishingBobbers();
                 UpdateItemUseTracking();
                 TrackNpcConversation();
+                AdvanceHighFrequencyStatisticsBatch();
             }
 
             // CanBuy/CanSell 与各自的 Post 回调在同一次商店操作中同步成对出现；跨帧
@@ -840,7 +889,7 @@ namespace ComprehensiveStatistics.Common.Players
                 return;
             }
 
-            Record(
+            RecordHighFrequency(
                 StatisticKeys.GetItemUseKey(content),
                 new StatisticMetrics(events: 1L));
         }
@@ -863,7 +912,7 @@ namespace ComprehensiveStatistics.Common.Players
                 return;
             }
 
-            Record(
+            RecordHighFrequency(
                 StatisticKeys.GetAmmoUsageKey(ammoContent),
                 new StatisticMetrics(
                     units: expectedConsumption,
@@ -1063,6 +1112,16 @@ namespace ComprehensiveStatistics.Common.Players
                 return;
             }
 
+            // 正常销毁由 GlobalProjectile 立即回调；这里只是兼容第三方模组漏回调的兜底，
+            // 无需为持续存在的浮标逐帧遍历集合。
+            ulong currentUpdate = Main.GameUpdateCount;
+            if (currentUpdate < nextFishingReconciliationUpdate)
+            {
+                return;
+            }
+
+            nextFishingReconciliationUpdate = currentUpdate + FishingReconciliationIntervalTicks;
+
             staleFishingBobberIndices.Clear();
             foreach (int projectileIndex in trackedFishingBobberIndices)
             {
@@ -1129,6 +1188,7 @@ namespace ComprehensiveStatistics.Common.Players
             ClearActiveFishingBaitSession();
             trackedFishingBobberIndices.Clear();
             staleFishingBobberIndices.Clear();
+            nextFishingReconciliationUpdate = 0UL;
         }
 
         /// <summary>
@@ -1146,6 +1206,7 @@ namespace ComprehensiveStatistics.Common.Players
             ClearActiveFishingBaitSession();
             trackedFishingBobberIndices.Clear();
             staleFishingBobberIndices.Clear();
+            nextFishingReconciliationUpdate = 0UL;
         }
 
         /// <summary>
@@ -1326,7 +1387,7 @@ namespace ComprehensiveStatistics.Common.Players
                 return;
             }
 
-            Record(
+            RecordHighFrequency(
                 StatisticKeys.TotalMovementDistance,
                 new StatisticMetrics(amount: completedPixels));
             // 可解析的特殊移动只写物品明细；基础类别或无法解析的特殊来源写无内容键。
@@ -1337,7 +1398,7 @@ namespace ComprehensiveStatistics.Common.Players
                         movementMode,
                         movementContent.Value)
                     : StatisticKeys.GetMovementModeDistanceKey(movementMode);
-            Record(movementKey, new StatisticMetrics(amount: completedPixels));
+            RecordHighFrequency(movementKey, new StatisticMetrics(amount: completedPixels));
             pendingMovementPixels -= completedPixels;
         }
 
@@ -1796,6 +1857,68 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 合并移动、连发武器和批量布线产生的高频增量，避免每次事件都重复写入
+        /// 角色生涯与当前世界字典；批次有时间、条目数和生命周期三重刷新边界。
+        /// </summary>
+        private void RecordHighFrequency(StatisticKey key, StatisticMetrics delta)
+        {
+            if (delta.IsZero)
+            {
+                return;
+            }
+
+            EnsureCurrentWorldSlice();
+            pendingHighFrequencyStatistics.TryGetValue(key, out StatisticMetrics current);
+            pendingHighFrequencyStatistics[key] = current.Add(delta);
+            if (pendingHighFrequencyStatistics.Count >= HighFrequencyMaximumPendingEntries)
+            {
+                FlushPendingStatistics();
+            }
+        }
+
+        /// <summary>
+        /// 推进高频增量批次，并在达到固定时间上限后统一提交。
+        /// </summary>
+        private void AdvanceHighFrequencyStatisticsBatch()
+        {
+            if (pendingHighFrequencyStatistics.Count == 0)
+            {
+                pendingHighFrequencyTicks = 0;
+                return;
+            }
+
+            pendingHighFrequencyTicks++;
+            if (pendingHighFrequencyTicks >= HighFrequencyFlushIntervalTicks)
+            {
+                FlushPendingStatistics();
+            }
+        }
+
+        /// <summary>
+        /// 将所有待提交高频增量写入它们开始时所属的当前世界。
+        /// 保存、世界切换和打开统计 UI 会调用此方法，保证持久化与显示不落后一批。
+        /// </summary>
+        internal void FlushPendingStatistics()
+        {
+            if (pendingHighFrequencyStatistics.Count == 0)
+            {
+                pendingHighFrequencyTicks = 0;
+                return;
+            }
+
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair
+                in pendingHighFrequencyStatistics)
+            {
+                Data.Add(currentWorldId, pair.Key, pair.Value, now);
+            }
+
+            currentWorldSlice = Data.GetOrCreateWorldSlice(currentWorldId, now);
+            pendingHighFrequencyStatistics.Clear();
+            pendingHighFrequencyTicks = 0;
+        }
+
+        /// <summary>
         /// 记录本地所属玩家成功放置的一个实体物块。
         /// </summary>
         internal void RecordPlacedTile(int tileType)
@@ -1912,23 +2035,24 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
-        /// 记录本地所属玩家成功放置或拆除的一个电线/制动器组件。
+        /// 记录本地所属玩家成功放置或拆除的一批同类电线/制动器组件。
         /// 放置与拆除分别写入 Events 和 Units，世界格位没有实际变化时调用方不得提交。
         /// </summary>
-        internal void RecordWiringComponentChange(
+        internal void RecordWiringComponentChanges(
             WiringComponentKind component,
-            bool placed)
+            bool placed,
+            long count)
         {
-            if (!IsOwnedByLocalClient)
+            if (!IsOwnedByLocalClient || count <= 0L)
             {
                 return;
             }
 
-            Record(
+            RecordHighFrequency(
                 StatisticKeys.GetWiringComponentActivityKey(component),
                 placed
-                    ? new StatisticMetrics(events: 1L)
-                    : new StatisticMetrics(units: 1L));
+                    ? new StatisticMetrics(events: count)
+                    : new StatisticMetrics(units: count));
         }
 
         /// <summary>

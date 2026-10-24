@@ -1,1 +1,33 @@
-This description will show up on the steam page, check out https://steamcommunity.com/comment/Guide/formattinghelp.
+[h1]Comprehensive Statistics / 综合统计[/h1]
+
+Comprehensive Statistics records detailed character activity and selected world-wide events from the moment the mod is enabled.
+
+[list]
+[*]Blocks, walls, wires, actuators, furniture, and multi-tile objects
+[*]Item pickup, use, discard, ammunition consumption, and bait consumption
+[*]NPC interactions, final kills, assists, and current-world NPC deaths
+[*]Purchases, sales, nurse healing, reforging, and tax collection
+[*]Fishing results, movement distance, deaths, life lost, and damage sources
+[*]Character-career and per-world views with search, source filters, sorting, and persistent group expansion
+[*]Single-player, host-and-play, and dedicated-server support
+[*]English and Simplified Chinese localization
+[/list]
+
+Statistics begin when the mod is enabled; events from earlier play sessions cannot be reconstructed.
+
+[h1]综合统计[/h1]
+
+综合统计从启用模组后开始记录详细的角色活动，以及少量由当前世界统一保存的公共事件。
+
+[list]
+[*]物块、背景墙、电线、制动器、家具与多格物体
+[*]物品拾取、使用、丢弃，以及弹药和鱼饵消耗
+[*]NPC 交互、最终击杀、协助击杀和当前世界 NPC 实际死亡
+[*]买入、卖出、护士治疗、重铸和税款收集
+[*]钓鱼结果、移动距离、死亡、掉血与伤害来源
+[*]角色生涯与分世界查看，支持搜索、来源筛选、排序和持久化折叠状态
+[*]支持单人、主机联机和专用服务器
+[*]支持英文与简体中文
+[/list]
+
+本模组只能统计启用之后发生的行为，无法还原此前的历史数据。

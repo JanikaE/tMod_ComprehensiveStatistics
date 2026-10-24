@@ -35,12 +35,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     {
         private const float RowHeight = 28f;
         private const float ControlGap = 5f;
+        private const float SearchClearButtonWidth = 18f;
+        private const float SearchClearButtonGap = 4f;
 
         private readonly Action<StatisticsViewScope> scopeChanged;
         private readonly Action<string, StatisticsContentSourceFilter> filtersChanged;
         private readonly ToolbarButton scopeButton;
         private readonly UIPanel searchPanel;
         private readonly UISearchBar searchBar;
+        private readonly UIText searchPlaceholder;
+        private readonly UIPanel clearSearchButton;
+        private readonly UIText clearSearchText;
         private readonly ToolbarButton sourceButton;
 
         private StatisticsViewScope scope = StatisticsViewScope.CharacterCareer;
@@ -70,17 +75,55 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             searchPanel.SetPadding(5f);
             searchPanel.BackgroundColor = new Color(20, 27, 52, 235);
             searchPanel.BorderColor = new Color(75, 97, 174, 255);
-            searchPanel.OverflowHidden = true;
+            // UISearchBar 会在自身下方绘制中文输入法的组合串与候选面板。
+            // 父面板不能裁剪子元素，否则拼音字母和候选项会全部不可见。
+            searchPanel.OverflowHidden = false;
             searchPanel.OnLeftClick += StartSearchInput;
             Append(searchPanel);
 
             searchBar = new UISearchBar(
-                Language.GetText("Mods.ComprehensiveStatistics.UI.Toolbar.SearchHint"),
+                LocalizedText.Empty,
                 0.72f);
-            searchBar.Width.Set(0f, 1f);
+            searchBar.Width.Set(
+                -(SearchClearButtonWidth + SearchClearButtonGap),
+                1f);
             searchBar.Height.Set(0f, 1f);
             searchBar.OnContentsChanged += SearchContentsChanged;
             searchPanel.Append(searchBar);
+
+            // UISearchBar 的内置占位文本会在模组热重载后停留为空，直到内容首次变化。
+            // 独立提示层只依赖本模组保存的查询状态，因此空查询始终能立即显示提示。
+            searchPlaceholder = new UIText(string.Empty, 0.72f);
+            searchPlaceholder.Left.Set(3f, 0f);
+            searchPlaceholder.Width.Set(
+                -(SearchClearButtonWidth + SearchClearButtonGap + 3f),
+                1f);
+            searchPlaceholder.Height.Set(0f, 1f);
+            searchPlaceholder.VAlign = 0.5f;
+            searchPlaceholder.TextColor = new Color(130, 144, 184);
+            searchPlaceholder.DynamicallyScaleDownToWidth = true;
+            searchPlaceholder.IgnoresMouseInteraction = true;
+            searchPanel.Append(searchPlaceholder);
+
+            // 占位层必须位于 UISearchBar 后方；中文组合串由 UISearchBar 绘制，
+            // 若占位层在其上方会再次遮住尚未提交的拼音文本。
+            searchBar.Remove();
+            searchPanel.Append(searchBar);
+
+            clearSearchButton = new UIPanel();
+            clearSearchButton.Left.Set(-SearchClearButtonWidth, 1f);
+            clearSearchButton.Width.Set(SearchClearButtonWidth, 0f);
+            clearSearchButton.Height.Set(0f, 1f);
+            clearSearchButton.SetPadding(0f);
+            clearSearchButton.BorderColor = new Color(75, 97, 174, 255);
+            clearSearchButton.OnLeftClick += ClearSearch;
+            searchPanel.Append(clearSearchButton);
+
+            clearSearchText = new UIText("×", 0.72f);
+            clearSearchText.HAlign = 0.5f;
+            clearSearchText.VAlign = 0.5f;
+            clearSearchText.IgnoresMouseInteraction = true;
+            clearSearchButton.Append(clearSearchText);
 
             sourceButton = new ToolbarButton(CycleSourceFilter);
             sourceButton.Top.Set(0f, 0f);
@@ -97,8 +140,17 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             base.OnActivate();
 
             // ModSystem.Load 中的预初始化早于本地化注册；真正挂载界面时必须重新解析所有文本。
-            RefreshButtonLabels();
+            RefreshLocalizedText();
             searchBar.SetContents(searchQuery, forced: true);
+        }
+
+        /// <summary>
+        /// 在本地化表可用后刷新按钮与搜索占位文本，供窗口实际打开时显式调用。
+        /// </summary>
+        internal void RefreshLocalizedText()
+        {
+            RefreshButtonLabels();
+            RefreshSearchVisuals();
         }
 
         public override void Update(GameTime gameTime)
@@ -109,6 +161,15 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 lastWidth = width;
                 UpdateControlLayout(width);
             }
+
+            bool canClearSearch = searchQuery.Length > 0;
+            clearSearchButton.BackgroundColor = canClearSearch
+                && clearSearchButton.IsMouseHovering
+                    ? new Color(63, 82, 151, 245)
+                    : new Color(36, 47, 88, 225);
+            clearSearchText.TextColor = canClearSearch
+                ? new Color(220, 228, 248)
+                : new Color(93, 105, 142);
 
             base.Update(gameTime);
         }
@@ -161,8 +222,41 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         /// </summary>
         private void SearchContentsChanged(string contents)
         {
-            searchQuery = contents;
+            searchQuery = contents ?? string.Empty;
+            RefreshSearchVisuals();
             NotifyFiltersChanged();
+        }
+
+        /// <summary>
+        /// 清空搜索内容，并立即恢复占位提示和未搜索的列表结果。
+        /// </summary>
+        private void ClearSearch(UIMouseEvent evt, UIElement listeningElement)
+        {
+            if (searchQuery.Length == 0)
+            {
+                return;
+            }
+
+            searchBar.SetContents(string.Empty, forced: true);
+            // 当前 tModLoader 会通过 OnContentsChanged 回调同步状态；此兜底保证未来
+            // SetContents 行为变化时，清空按钮仍不会留下陈旧过滤条件。
+            if (searchQuery.Length > 0)
+            {
+                SearchContentsChanged(string.Empty);
+            }
+
+            SoundEngine.PlaySound(SoundID.MenuTick);
+        }
+
+        /// <summary>
+        /// 根据当前查询刷新稳定占位文本；不依赖 UISearchBar 的热重载内部状态。
+        /// </summary>
+        private void RefreshSearchVisuals()
+        {
+            searchPlaceholder.SetText(searchQuery.Length == 0
+                ? Language.GetTextValue(
+                    "Mods.ComprehensiveStatistics.UI.Toolbar.SearchHint")
+                : string.Empty);
         }
 
         /// <summary>

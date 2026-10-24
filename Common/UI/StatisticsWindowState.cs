@@ -29,6 +29,10 @@ namespace ComprehensiveStatistics.Common.UI
         private const int TabCount = 10;
         private const float WindowMargin = 12f;
         private const float WindowPadding = 12f;
+        private const float PreferredWindowWidth = 1100f;
+        private const float PreferredWindowHeight = 820f;
+        private const float WindowWidthViewportRatio = 0.9f;
+        private const float WindowHeightViewportRatio = 0.94f;
         private const float HeaderHeight = 40f;
         private const float ColumnGap = 10f;
         private const float TabGap = 4f;
@@ -83,6 +87,7 @@ namespace ComprehensiveStatistics.Common.UI
         private VirtualizedStatisticsList baitList;
         private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
+        private VirtualizedStatisticsList[] statisticsLists;
         private UIImageButton closeButton;
         private int selectedTabIndex;
         private Point lastViewportSize;
@@ -105,20 +110,20 @@ namespace ComprehensiveStatistics.Common.UI
             && Main.LocalPlayer?.active == true;
 
         /// <summary>
-        /// 开始一次新的窗口会话，恢复各 Tab 列表默认的折叠与无排序状态。
+        /// 开始一次新的窗口会话，清除旧人物的内存折叠状态并恢复无排序状态；
+        /// 当前人物的持久化折叠状态会在运行时数据可用后重新加载。
         /// </summary>
         internal void ResetTransientViewState()
         {
-            blockList?.ResetTransientState();
-            itemList?.ResetTransientState();
-            ammoList?.ResetTransientState();
-            interactionList?.ResetTransientState();
-            killList?.ResetTransientState();
-            economyList?.ResetTransientState();
-            fishingList?.ResetTransientState();
-            baitList?.ResetTransientState();
-            movementList?.ResetTransientState();
-            survivalList?.ResetTransientState();
+            if (statisticsLists == null)
+            {
+                return;
+            }
+
+            foreach (VirtualizedStatisticsList statisticsList in statisticsLists)
+            {
+                statisticsList.ResetTransientState();
+            }
         }
 
         /// <summary>
@@ -127,8 +132,10 @@ namespace ComprehensiveStatistics.Common.UI
         internal void BeginRuntimeStatisticsAccess()
         {
             runtimeStatisticsAccessEnabled = true;
+            toolbar.RefreshLocalizedText();
             UpdateWindowHeaderLayout();
             UpdatePageHeading();
+            RestoreActiveExpansionState();
         }
 
         /// <summary>
@@ -286,16 +293,31 @@ namespace ComprehensiveStatistics.Common.UI
             baitList.Width.Set(0f, 1f);
             baitList.Height.Set(-ListTop, 1f);
 
-            blockList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            itemList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            ammoList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            interactionList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            killList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            economyList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            fishingList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            baitList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            movementList.ExpansionStateChanged += UpdateExpandCollapseButton;
-            survivalList.ExpansionStateChanged += UpdateExpandCollapseButton;
+            // 顺序与 Tab 索引保持一致，使通用筛选和瞬时状态不会漏接某个真实数据页。
+            statisticsLists = new[]
+            {
+                blockList,
+                itemList,
+                ammoList,
+                interactionList,
+                killList,
+                economyList,
+                fishingList,
+                baitList,
+                movementList,
+                survivalList
+            };
+            if (statisticsLists.Length != TabCount)
+            {
+                throw new InvalidOperationException(
+                    "Every statistics tab must register exactly one filterable list.");
+            }
+
+            foreach (VirtualizedStatisticsList statisticsList in statisticsLists)
+            {
+                statisticsList.ExpansionStateChanged += UpdateExpandCollapseButton;
+                statisticsList.ExpansionStateCommitted += SaveActiveExpansionState;
+            }
 
             toolbar = new StatisticsToolbar(
                 HandleScopeChanged,
@@ -375,6 +397,12 @@ namespace ComprehensiveStatistics.Common.UI
             SetBaitTotalsVisible(tabIndex == BaitTabIndex);
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
+
+            // 列表是在切换 Tab 时动态挂载的，必须把工具栏重新放到绘制顺序末尾。
+            // 否则 UISearchBar 画在输入框下方的 IME 候选面板会被列表行覆盖。
+            toolbar.Remove();
+            contentPanel.Append(toolbar);
+            RestoreActiveExpansionState();
             UpdateExpandCollapseButton();
             UpdateTabColors();
 
@@ -431,9 +459,13 @@ namespace ComprehensiveStatistics.Common.UI
             // 窗口永远不超过可用 UI 画布；极小画布下压缩控件但不让窗口越界。
             float availableWidth = MathHelper.Max(1f, viewportWidth - WindowMargin * 2f);
             float availableHeight = MathHelper.Max(1f, viewportHeight - WindowMargin * 2f);
-            float windowWidth = MathHelper.Min(920f, MathHelper.Max(460f, viewportWidth * 0.82f));
+            float windowWidth = MathHelper.Min(
+                PreferredWindowWidth,
+                MathHelper.Max(460f, viewportWidth * WindowWidthViewportRatio));
             // 为统计列表提供更多纵向空间；仍保留画布边距并在小分辨率下响应式收缩。
-            float windowHeight = MathHelper.Min(760f, MathHelper.Max(400f, viewportHeight * 0.9f));
+            float windowHeight = MathHelper.Min(
+                PreferredWindowHeight,
+                MathHelper.Max(400f, viewportHeight * WindowHeightViewportRatio));
             windowWidth = MathHelper.Min(windowWidth, availableWidth);
             windowHeight = MathHelper.Min(windowHeight, availableHeight);
 
@@ -487,6 +519,7 @@ namespace ComprehensiveStatistics.Common.UI
         private void HandleScopeChanged(StatisticsViewScope scope)
         {
             UpdatePageHeading();
+            RestoreActiveExpansionState();
         }
 
         /// <summary>
@@ -496,16 +529,10 @@ namespace ComprehensiveStatistics.Common.UI
             string searchQuery,
             StatisticsContentSourceFilter sourceFilter)
         {
-            blockList.SetFilters(searchQuery, sourceFilter);
-            itemList.SetFilters(searchQuery, sourceFilter);
-            ammoList.SetFilters(searchQuery, sourceFilter);
-            interactionList.SetFilters(searchQuery, sourceFilter);
-            killList.SetFilters(searchQuery, sourceFilter);
-            economyList.SetFilters(searchQuery, sourceFilter);
-            fishingList.SetFilters(searchQuery, sourceFilter);
-            baitList.SetFilters(searchQuery, sourceFilter);
-            movementList.SetFilters(searchQuery, sourceFilter);
-            survivalList.SetFilters(searchQuery, sourceFilter);
+            foreach (VirtualizedStatisticsList statisticsList in statisticsLists)
+            {
+                statisticsList.SetFilters(searchQuery, sourceFilter);
+            }
         }
 
         /// <summary>
@@ -527,20 +554,59 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private VirtualizedStatisticsList GetActiveStatisticsList()
         {
-            return selectedTabIndex switch
+            return statisticsLists != null
+                && selectedTabIndex >= 0
+                && selectedTabIndex < statisticsLists.Length
+                    ? statisticsLists[selectedTabIndex]
+                    : null;
+        }
+
+        /// <summary>
+        /// 将用户刚刚提交的当前 Tab 折叠状态写入人物数据中的对应范围。
+        /// </summary>
+        private void SaveActiveExpansionState()
+        {
+            if (!CanReadRuntimeStatistics)
             {
-                BlocksTabIndex => blockList,
-                ItemsTabIndex => itemList,
-                AmmoTabIndex => ammoList,
-                InteractionsTabIndex => interactionList,
-                KillsTabIndex => killList,
-                EconomyTabIndex => economyList,
-                FishingTabIndex => fishingList,
-                BaitTabIndex => baitList,
-                MovementTabIndex => movementList,
-                SurvivalTabIndex => survivalList,
-                _ => null
-            };
+                return;
+            }
+
+            VirtualizedStatisticsList activeList = GetActiveStatisticsList();
+            if (activeList == null)
+            {
+                return;
+            }
+
+            StatisticsViewScope scope = toolbar?.Scope ?? StatisticsViewScope.CharacterCareer;
+            Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().SaveExpansionStates(
+                TabLocalizationKeys[selectedTabIndex],
+                currentWorld: scope == StatisticsViewScope.CharacterCurrentWorld,
+                activeList.GetExpansionStates());
+        }
+
+        /// <summary>
+        /// 从人物存档恢复当前 Tab 在人物生涯或当前世界中的独立折叠状态。
+        /// </summary>
+        private void RestoreActiveExpansionState()
+        {
+            if (!CanReadRuntimeStatistics)
+            {
+                return;
+            }
+
+            VirtualizedStatisticsList activeList = GetActiveStatisticsList();
+            if (activeList == null)
+            {
+                return;
+            }
+
+            StatisticsViewScope scope = toolbar?.Scope ?? StatisticsViewScope.CharacterCareer;
+            IReadOnlyDictionary<string, bool> savedStates = Main.LocalPlayer
+                .GetModPlayer<StatisticsPlayer>()
+                .GetSavedExpansionStates(
+                    TabLocalizationKeys[selectedTabIndex],
+                    currentWorld: scope == StatisticsViewScope.CharacterCurrentWorld);
+            activeList.RestoreExpansionStates(savedStates);
         }
 
         /// <summary>
@@ -607,10 +673,7 @@ namespace ComprehensiveStatistics.Common.UI
 
             if (CanReadRuntimeStatistics)
             {
-                StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-                startedAtUtc = scope == StatisticsViewScope.CharacterCurrentWorld
-                    ? statisticsPlayer.CurrentWorldSlice?.StartedAtUtc
-                    : statisticsPlayer.Data?.Career.StartedAtUtc;
+                startedAtUtc = GetCharacterScopeData(scope)?.StartedAtUtc;
             }
 
             if (startedAtUtc.HasValue)
@@ -647,10 +710,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData characterData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData characterData = GetCharacterScopeData(scope);
             StatisticsData worldData = ModContent.GetInstance<StatisticsWorldSystem>().Data;
             killList.SetGroups(CreateKillGroups(characterData, worldData));
         }
@@ -665,10 +725,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             interactionList.SetGroups(CreateInteractionGroups(scopeData));
         }
 
@@ -682,10 +739,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             blockList.SetGroups(CreateBlockGroups(scopeData));
         }
 
@@ -699,10 +753,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             itemList.SetGroups(CreateItemGroups(scopeData));
         }
 
@@ -716,10 +767,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             ammoList.SetGroups(CreateAmmoGroups(scopeData));
         }
 
@@ -733,10 +781,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             economyList.SetGroups(CreateEconomyGroups(scopeData));
         }
 
@@ -750,10 +795,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             fishingList.SetGroups(CreateFishingGroups(scopeData));
         }
 
@@ -767,10 +809,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             baitList.SetGroups(CreateBaitGroups(scopeData));
         }
 
@@ -784,10 +823,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             movementList.SetGroups(CreateMovementGroups(scopeData));
         }
 
@@ -801,11 +837,23 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
-            StatisticsData scopeData = scope == StatisticsViewScope.CharacterCurrentWorld
-                ? statisticsPlayer.CurrentWorldSlice
-                : statisticsPlayer.Data?.Career;
+            StatisticsData scopeData = GetCharacterScopeData(scope);
             survivalList.SetGroups(CreateSurvivalGroups(scopeData));
+        }
+
+        /// <summary>
+        /// 将工具栏角色范围统一解析为对应统计数据；世界公共数据不经过此入口。
+        /// </summary>
+        private static StatisticsData GetCharacterScopeData(StatisticsViewScope scope)
+        {
+            StatisticsPlayer statisticsPlayer =
+                Main.LocalPlayer.GetModPlayer<StatisticsPlayer>();
+            return scope switch
+            {
+                StatisticsViewScope.CharacterCareer => statisticsPlayer.Data?.Career,
+                StatisticsViewScope.CharacterCurrentWorld => statisticsPlayer.CurrentWorldSlice,
+                _ => throw new ArgumentOutOfRangeException(nameof(scope), scope, null)
+            };
         }
 
         /// <summary>
@@ -1384,7 +1432,8 @@ namespace ComprehensiveStatistics.Common.UI
                 metricDisplay: StatisticsMetricDisplay.Events,
                 iconType: resolved ? npcType : 0,
                 icon: icon,
-                iconKind: resolved ? StatisticsIconKind.Npc : StatisticsIconKind.None);
+                iconKind: resolved ? StatisticsIconKind.Npc : StatisticsIconKind.None,
+                stateKey: $"npc:{content}");
         }
 
         /// <summary>
@@ -1747,7 +1796,8 @@ namespace ComprehensiveStatistics.Common.UI
                         icon: merchantIcon,
                         iconKind: StatisticsIconKind.Npc,
                         amountIconType: amountIconType,
-                        amountIcon: currencyIcon));
+                        amountIcon: currencyIcon,
+                        stateKey: $"merchant:{merchant.Key}"));
                 }
 
                 string groupName = Language.GetTextValue(
@@ -1762,7 +1812,8 @@ namespace ComprehensiveStatistics.Common.UI
                     icon: currencyIcon,
                     iconKind: StatisticsIconKind.Item,
                     amountIconType: amountIconType,
-                    amountIcon: currencyIcon));
+                    amountIcon: currencyIcon,
+                    stateKey: $"currency:{currency.Key}"));
             }
 
             return groups;
@@ -1812,7 +1863,8 @@ namespace ComprehensiveStatistics.Common.UI
                     metricDisplay: StatisticsMetricDisplay.EconomyTransactions,
                     iconType: resolved ? npcType : 0,
                     icon: merchantIcon,
-                    iconKind: StatisticsIconKind.Npc));
+                    iconKind: StatisticsIconKind.Npc,
+                    stateKey: $"merchant:{merchant.Key}"));
             }
 
             return new StatisticsListGroup(
@@ -2812,7 +2864,8 @@ namespace ComprehensiveStatistics.Common.UI
                         metricDisplay: StatisticsMetricDisplay.AmmoActivity,
                         iconType: iconType,
                         icon: icon,
-                        iconKind: StatisticsIconKind.Item)));
+                        iconKind: StatisticsIconKind.Item,
+                        stateKey: $"ammo:{pair.Key.ToString(CultureInfo.InvariantCulture)}")));
             }
 
             keyedGroups.Sort((left, right) =>

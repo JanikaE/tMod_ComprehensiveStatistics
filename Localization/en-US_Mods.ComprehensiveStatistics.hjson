@@ -2,7 +2,6 @@ Keybinds.ToggleStatistics.DisplayName: Toggle statistics window
 
 UI: {
 	WindowTitle: Comprehensive Statistics
-	EmptyWindow: Statistics categories will be added in the next development step.
 	OpenButtonTooltip:
 		'''
 		Comprehensive Statistics
@@ -11,7 +10,6 @@ UI: {
 	CloseButtonTooltip: Close
 	StatisticsStartedAt: Statistics started: {0:g}
 	StatisticsStartUnavailable: Statistics start time is unavailable outside a world.
-	B2PersistenceTestCounter: B2 temporary test · World entries: {0:N0}
 
 	Blocks: {
 		SolidTilesGroup: Blocks
@@ -223,52 +221,52 @@ UI: {
 	Tabs: {
 		Blocks: {
 			Title: Blocks
-			Description: Block, background wall, wire, and actuator placement or removal statistics appear here; furniture and multi-tile objects are included under Blocks.
+			Description: Placement and removal of blocks, walls, wires, actuators, and furniture.
 		}
 
 		Items: {
 			Title: Items
-			Description: Item pickup, use, and discard statistics appear here.
+			Description: Item pickups, uses, and discards.
 		}
 
 		Ammo: {
 			Title: Ammo
-			Description: Expected use, actual consumption, and consumption rates appear here by ammo category and item.
+			Description: Expected and actual ammo use by category and item.
 		}
 
 		Interactions: {
 			Title: Interactions
-			Description: NPC conversations and actions, plus buff station, furniture, container, pylon, clock, and mechanism interactions will appear here.
+			Description: NPC conversations and interactions with facilities and mechanisms.
 		}
 
 		Kills: {
 			Title: Kills
-			Description: Final kills and assists by this character, plus actual NPC deaths in the current world, will appear here.
+			Description: Character kills and assists, plus current-world NPC deaths.
 		}
 
 		Economy: {
 			Title: Economy
-			Description: Purchases, sales, nurse healing, reforging, and currency flow will appear here.
+			Description: Purchases, sales, healing, reforging, and currency flow.
 		}
 
 		Fishing: {
 			Title: Fishing
-			Description: Casts, catches, interrupted casts, and catch details appear here.
+			Description: Casts, catches, interruptions, and catch details.
 		}
 
 		Bait: {
 			Title: Bait
-			Description: Expected use, actual consumption, and consumption rates appear here by bait item.
+			Description: Expected and actual bait use by item.
 		}
 
 		Movement: {
 			Title: Movement
-			Description: Total distance and distance by movement type will appear here.
+			Description: Total travel distance and distance by movement type.
 		}
 
 		Survival: {
 			Title: Survival
-			Description: Deaths, life lost, and damage source statistics will appear here.
+			Description: Deaths, life lost, and damage sources.
 		}
 	}
 

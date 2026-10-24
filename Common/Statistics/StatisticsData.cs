@@ -52,7 +52,7 @@ namespace ComprehensiveStatistics.Common.Statistics
         /// </summary>
         internal void Add(StatisticKey key, StatisticMetrics delta)
         {
-            // 零值不进入字典，保证后续 B2 序列化天然保持稀疏。
+            // 零值不进入字典，保证长期存档天然保持稀疏。
             if (delta.IsZero)
             {
                 return;
@@ -108,6 +108,7 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal CharacterStatisticsData(DateTimeOffset startedAtUtc)
         {
             Career = new StatisticsData(startedAtUtc);
+            ExpansionStates = new StatisticsExpansionStateStore();
         }
 
         /// <summary>
@@ -115,9 +116,11 @@ namespace ComprehensiveStatistics.Common.Statistics
         /// </summary>
         internal CharacterStatisticsData(
             StatisticsData career,
-            IDictionary<Guid, StatisticsData> loadedWorldSlices)
+            IDictionary<Guid, StatisticsData> loadedWorldSlices,
+            StatisticsExpansionStateStore expansionStates = null)
         {
             Career = career ?? throw new ArgumentNullException(nameof(career));
+            ExpansionStates = expansionStates ?? new StatisticsExpansionStateStore();
 
             if (loadedWorldSlices == null)
             {
@@ -136,6 +139,8 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal StatisticsData Career { get; }
 
         internal IReadOnlyDictionary<Guid, StatisticsData> WorldSlices => worldSlices;
+
+        internal StatisticsExpansionStateStore ExpansionStates { get; }
 
         /// <summary>
         /// 获取指定世界切片；不存在时以当前时间创建。

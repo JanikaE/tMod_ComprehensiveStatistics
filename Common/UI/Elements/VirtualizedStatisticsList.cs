@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -39,9 +40,15 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private string searchQuery = string.Empty;
         private StatisticsContentSourceFilter sourceFilter;
         private float lastViewportHeight = -1f;
+        private float lastFirstRowOffset = float.NaN;
+        private int lastFirstEntryIndex = -1;
+        private int lastRowsNeeded = -1;
+        private bool rowsBindingDirty = true;
         private bool isEmptyTextAttached;
 
         internal event Action ExpansionStateChanged;
+
+        internal event Action ExpansionStateCommitted;
 
         internal bool HasExpandableGroups => visibleEntries.Any(entry =>
             entry.Group != null && entry.Group.ShowChildren);
@@ -101,7 +108,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
-        /// 清除本次窗口会话的折叠与排序状态，并恢复各分组定义的默认状态。
+        /// 清除列表内存中的折叠状态并恢复默认值，同时重置本次窗口会话的排序状态。
+        /// 持久化折叠状态会在窗口打开并读取人物数据后重新应用。
         /// </summary>
         internal void ResetTransientState()
         {
@@ -114,6 +122,38 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         }
 
         /// <summary>
+        /// 捕获当前数据树及暂时不可见分组的完整展开状态快照。
+        /// </summary>
+        internal IReadOnlyDictionary<string, bool> GetExpansionStates()
+        {
+            CaptureExpansionStates(groups, parentPath: string.Empty);
+            return new Dictionary<string, bool>(expansionStates);
+        }
+
+        /// <summary>
+        /// 用人物存档中的状态替换当前上下文，并将缺少记录的分组恢复为定义默认值。
+        /// </summary>
+        internal void RestoreExpansionStates(IReadOnlyDictionary<string, bool> savedStates)
+        {
+            expansionStates.Clear();
+            if (savedStates != null)
+            {
+                foreach (KeyValuePair<string, bool> pair in savedStates)
+                {
+                    if (!string.IsNullOrEmpty(pair.Key))
+                    {
+                        expansionStates[pair.Key] = pair.Value;
+                    }
+                }
+            }
+
+            ResetExpansionStates(groups);
+            ApplyExpansionStates(groups, parentPath: string.Empty);
+            RebuildVisibleEntries(resetScroll: true);
+            ExpansionStateChanged?.Invoke();
+        }
+
+        /// <summary>
         /// 统一设置当前列表中全部可展开分组，并保存为本次窗口会话的折叠状态。
         /// </summary>
         internal void SetAllGroupsExpanded(bool expanded)
@@ -122,6 +162,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             CaptureExpansionStates(groups, parentPath: string.Empty);
             RebuildVisibleEntries(resetScroll: true);
             ExpansionStateChanged?.Invoke();
+            ExpansionStateCommitted?.Invoke();
         }
 
         /// <summary>
@@ -185,6 +226,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 row.Height.Set(RowHeight - 2f, 0f);
                 rowPool.Add(row);
                 rowViewport.Append(row);
+                rowsBindingDirty = true;
             }
 
             if (lastViewportHeight != viewportHeight)
@@ -207,6 +249,16 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 rowPool.Count,
                 (int)Math.Ceiling((viewportHeight - firstRowOffset) / RowHeight) + 1);
 
+            bool requiresContentBinding = rowsBindingDirty
+                || firstEntryIndex != lastFirstEntryIndex
+                || rowsNeeded != lastRowsNeeded;
+            bool requiresLayoutUpdate = requiresContentBinding
+                || firstRowOffset != lastFirstRowOffset;
+            if (!requiresLayoutUpdate)
+            {
+                return;
+            }
+
             for (int poolIndex = 0; poolIndex < rowPool.Count; poolIndex++)
             {
                 StatisticsListRow row = rowPool[poolIndex];
@@ -217,13 +269,22 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     row.Top.Set(0f, 0f);
                     row.Width.Set(0f, 0f);
                     row.Height.Set(0f, 0f);
-                    row.ClearBinding();
+                    if (requiresContentBinding)
+                    {
+                        row.ClearBinding();
+                    }
+
                     continue;
                 }
 
                 row.Top.Set(firstRowOffset + poolIndex * RowHeight, 0f);
                 row.Width.Set(0f, 1f);
                 row.Height.Set(RowHeight - 2f, 0f);
+
+                if (!requiresContentBinding)
+                {
+                    continue;
+                }
 
                 DisplayEntry entry = visibleEntries[entryIndex];
                 if (entry.Group != null)
@@ -246,7 +307,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                         entry.MetricDisplay,
                         entry.Depth,
                         entry.UseAlternateColor,
-                        () => ToggleGroup(group));
+                        entry.ToggleAction);
                 }
                 else
                 {
@@ -259,6 +320,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             }
 
             rowViewport.Recalculate();
+            lastFirstEntryIndex = firstEntryIndex;
+            lastFirstRowOffset = firstRowOffset;
+            lastRowsNeeded = rowsNeeded;
+            rowsBindingDirty = false;
         }
 
         /// <summary>
@@ -270,6 +335,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             CaptureExpansionStates(groups, parentPath: string.Empty);
             RebuildVisibleEntries(resetScroll: false);
             ExpansionStateChanged?.Invoke();
+            ExpansionStateCommitted?.Invoke();
             SoundEngine.PlaySound(SoundID.MenuTick);
         }
 
@@ -298,7 +364,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             foreach (StatisticsListGroup group in sourceGroups)
             {
                 string path = CreateGroupPath(parentPath, group.StateKey);
-                expansionStates[path] = group.IsExpanded;
+                if (group.ShowChildren)
+                {
+                    expansionStates[path] = group.IsExpanded;
+                }
+
                 CaptureExpansionStates(group.ChildGroups, path);
             }
         }
@@ -313,7 +383,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             foreach (StatisticsListGroup group in targetGroups)
             {
                 string path = CreateGroupPath(parentPath, group.StateKey);
-                if (expansionStates.TryGetValue(path, out bool isExpanded))
+                if (group.ShowChildren
+                    && expansionStates.TryGetValue(path, out bool isExpanded))
                 {
                     group.IsExpanded = isExpanded;
                 }
@@ -349,6 +420,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         {
             // 先递归构建过滤后的分组树，再按展开状态展平；父组合计始终来自可见叶子项。
             visibleEntries.Clear();
+            rowsBindingDirty = true;
             List<FilteredGroup> filteredGroups = new List<FilteredGroup>();
             foreach (StatisticsListGroup group in groups)
             {
@@ -471,7 +543,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 filteredGroup.TotalRateUnits,
                 filteredGroup.TotalRateAmount,
                 depth,
-                resolvedMetricDisplay));
+                resolvedMetricDisplay,
+                filteredGroup.Group.ShowChildren
+                    ? () => ToggleGroup(filteredGroup.Group)
+                    : null));
             if (!filteredGroup.Group.IsExpanded || !filteredGroup.Group.ShowChildren)
             {
                 return;
@@ -626,13 +701,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     return leftHasRate ? -1 : 1;
                 }
 
-                double leftRate = leftHasRate
-                    ? (double)leftRateAmount / leftRateUnits
-                    : 0d;
-                double rightRate = rightHasRate
-                    ? (double)rightRateAmount / rightRateUnits
-                    : 0d;
-                result = leftRate.CompareTo(rightRate);
+                result = leftHasRate
+                    ? CompareRatios(
+                        leftRateAmount,
+                        leftRateUnits,
+                        rightRateAmount,
+                        rightRateUnits)
+                    : 0;
             }
             else
             {
@@ -647,6 +722,22 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             return result != 0
                 ? result
                 : string.Compare(leftName, rightName, StringComparison.CurrentCulture);
+        }
+
+        /// <summary>
+        /// 使用交叉乘积精确比较两个累计比率，避免长期存档中的大整数经 double 舍入后误判为相等。
+        /// </summary>
+        private static int CompareRatios(
+            long leftNumerator,
+            long leftDenominator,
+            long rightNumerator,
+            long rightDenominator)
+        {
+            BigInteger leftProduct =
+                (BigInteger)leftNumerator * rightDenominator;
+            BigInteger rightProduct =
+                (BigInteger)rightNumerator * leftDenominator;
+            return leftProduct.CompareTo(rightProduct);
         }
 
         /// <summary>
@@ -1225,7 +1316,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 long totalRateUnits,
                 long totalRateAmount,
                 int depth,
-                StatisticsMetricDisplay metricDisplay)
+                StatisticsMetricDisplay metricDisplay,
+                Action toggleAction)
             {
                 Group = group;
                 Item = item;
@@ -1236,6 +1328,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 TotalRateAmount = totalRateAmount;
                 Depth = depth;
                 MetricDisplay = metricDisplay;
+                ToggleAction = toggleAction;
             }
 
             internal StatisticsListGroup Group { get; }
@@ -1256,6 +1349,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             internal StatisticsMetricDisplay MetricDisplay { get; }
 
+            internal Action ToggleAction { get; }
+
             internal bool UseAlternateColor { get; set; }
 
             /// <summary>
@@ -1269,7 +1364,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 long totalRateUnits,
                 long totalRateAmount,
                 int depth,
-                StatisticsMetricDisplay metricDisplay)
+                StatisticsMetricDisplay metricDisplay,
+                Action toggleAction)
             {
                 return new DisplayEntry(
                     group,
@@ -1280,7 +1376,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     totalRateUnits,
                     totalRateAmount,
                     depth,
-                    metricDisplay);
+                    metricDisplay,
+                    toggleAction);
             }
 
             /// <summary>
@@ -1300,7 +1397,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     item.RateUnits,
                     item.RateAmount,
                     depth,
-                    metricDisplay);
+                    metricDisplay,
+                    toggleAction: null);
             }
         }
     }

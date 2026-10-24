@@ -15,6 +15,15 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string WorldTagKey = "WorldStatistics";
 
         private const int MaximumNetworkEntryCount = 1_000_000;
+        private const int MaximumStoredEntryCount = 1_000_000;
+        private const int MaximumWorldSliceCount = 100_000;
+        private const int MaximumExpansionStateCount = 100_000;
+        private const int MaximumExpansionTabKeyLength = 128;
+        private const int MaximumExpansionGroupPathLength = 8_192;
+        private const int MaximumStatisticIdLength = 256;
+        private const int MaximumContentKeyPartLength = 512;
+        private const int MaximumStyleLength = 1_024;
+        private const string InternalStatisticIdPrefix = "internal/";
 
         private const string FormatVersionKey = "FormatVersion";
         private const string StartedAtKey = "StartedAtUnixMilliseconds";
@@ -30,6 +39,10 @@ namespace ComprehensiveStatistics.Common.Statistics
         private const string EventsKey = "Events";
         private const string UnitsKey = "Units";
         private const string AmountKey = "Amount";
+        private const string ExpansionStatesKey = "ExpansionStates";
+        private const string ExpansionTabKey = "Tab";
+        private const string ExpansionGroupPathKey = "GroupPath";
+        private const string ExpansionExpandedKey = "Expanded";
 
         /// <summary>
         /// 将完整角色统计序列化为稳定、有序且稀疏的标签结构。
@@ -56,7 +69,8 @@ namespace ComprehensiveStatistics.Common.Statistics
             {
                 [FormatVersionKey] = StatisticsDataFormat.CurrentVersion,
                 [CareerKey] = SerializeScope(data.Career),
-                [WorldSlicesKey] = worldTags
+                [WorldSlicesKey] = worldTags,
+                [ExpansionStatesKey] = SerializeExpansionStates(data.ExpansionStates)
             };
         }
 
@@ -121,7 +135,7 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
 
             List<KeyValuePair<StatisticKey, StatisticMetrics>> entries = data.Entries
-                .Where(pair => !pair.Value.IsZero)
+                .Where(pair => IsPersistentEntry(pair.Key, pair.Value))
                 .OrderBy(pair => pair.Key.StatisticId, StringComparer.Ordinal)
                 .ThenBy(pair => pair.Key.Content?.ModName ?? string.Empty, StringComparer.Ordinal)
                 .ThenBy(pair => pair.Key.Content?.ContentName ?? string.Empty, StringComparer.Ordinal)
@@ -185,22 +199,30 @@ namespace ComprehensiveStatistics.Common.Statistics
                 for (int index = 0; index < entryCount; index++)
                 {
                     string statisticId = reader.ReadString();
-                    StableContentKey? content = null;
+                    string contentMod = null;
+                    string contentName = null;
                     if (reader.ReadBoolean())
                     {
-                        content = new StableContentKey(
-                            reader.ReadString(),
-                            reader.ReadString());
+                        contentMod = reader.ReadString();
+                        contentName = reader.ReadString();
                     }
 
                     string style = reader.ReadString();
-                    StatisticMetrics metrics = new StatisticMetrics(
-                        reader.ReadInt64(),
-                        reader.ReadInt64(),
-                        reader.ReadInt64());
-                    if (!metrics.IsZero)
+                    long events = reader.ReadInt64();
+                    long units = reader.ReadInt64();
+                    long amount = reader.ReadInt64();
+                    if (TryCreateEntry(
+                        statisticId,
+                        contentMod,
+                        contentName,
+                        style,
+                        events,
+                        units,
+                        amount,
+                        out StatisticKey key,
+                        out StatisticMetrics metrics))
                     {
-                        loadedData.Add(new StatisticKey(statisticId, content, style), metrics);
+                        loadedData.Add(key, metrics);
                     }
                 }
 
@@ -248,22 +270,49 @@ namespace ComprehensiveStatistics.Common.Statistics
                     return false;
                 }
 
-                Dictionary<Guid, StatisticsData> worldSlices =
-                    new Dictionary<Guid, StatisticsData>();
-                foreach (TagCompound worldTag in root.GetList<TagCompound>(WorldSlicesKey))
+                IList<TagCompound> worldTags = Array.Empty<TagCompound>();
+                if (root.ContainsKey(WorldSlicesKey))
                 {
-                    // 单个世界切片损坏不应阻止角色生涯及其他有效世界的数据恢复。
-                    if (!Guid.TryParse(worldTag.GetString(WorldIdKey), out Guid worldId)
-                        || worldSlices.ContainsKey(worldId)
-                        || !TryDeserializeScope(worldTag.GetCompound(DataKey), out StatisticsData worldData))
+                    try
                     {
-                        continue;
+                        worldTags = root.GetList<TagCompound>(WorldSlicesKey);
                     }
-
-                    worldSlices.Add(worldId, worldData);
+                    catch (Exception exception) when (IsRecoverableDataError(exception))
+                    {
+                        // 世界切片列表损坏时仍保留已经成功读取的角色生涯数据。
+                    }
                 }
 
-                data = new CharacterStatisticsData(career, worldSlices);
+                Dictionary<Guid, StatisticsData> worldSlices =
+                    new Dictionary<Guid, StatisticsData>();
+                int worldCount = Math.Min(worldTags.Count, MaximumWorldSliceCount);
+                for (int index = 0; index < worldCount; index++)
+                {
+                    TagCompound worldTag = worldTags[index];
+                    try
+                    {
+                        // 单个世界切片损坏不应阻止角色生涯及其他有效世界的数据恢复。
+                        if (worldTag == null
+                            || !Guid.TryParse(worldTag.GetString(WorldIdKey), out Guid worldId)
+                            || worldSlices.ContainsKey(worldId)
+                            || !TryDeserializeScope(
+                                worldTag.GetCompound(DataKey),
+                                out StatisticsData worldData))
+                        {
+                            continue;
+                        }
+
+                        worldSlices.Add(worldId, worldData);
+                    }
+                    catch (Exception exception) when (IsRecoverableDataError(exception))
+                    {
+                        // 保留其他可读取的世界切片。
+                    }
+                }
+
+                StatisticsExpansionStateStore expansionStates =
+                    DeserializeExpansionStates(root);
+                data = new CharacterStatisticsData(career, worldSlices, expansionStates);
                 return true;
             }
             catch (Exception exception)
@@ -274,13 +323,112 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 将人物生涯及各世界的 Tab 分组状态按稳定顺序写入人物存档。
+        /// </summary>
+        private static List<TagCompound> SerializeExpansionStates(
+            StatisticsExpansionStateStore store)
+        {
+            List<TagCompound> stateTags = new List<TagCompound>();
+            IEnumerable<KeyValuePair<StatisticsExpansionStateKey, bool>> orderedStates =
+                store.Entries
+                    .OrderBy(pair => pair.Key.WorldId.HasValue ? 1 : 0)
+                    .ThenBy(pair => pair.Key.WorldId ?? Guid.Empty)
+                    .ThenBy(pair => pair.Key.TabKey, StringComparer.Ordinal)
+                    .ThenBy(pair => pair.Key.GroupPath, StringComparer.Ordinal);
+
+            foreach (KeyValuePair<StatisticsExpansionStateKey, bool> pair in orderedStates)
+            {
+                TagCompound stateTag = new TagCompound
+                {
+                    [ExpansionTabKey] = pair.Key.TabKey,
+                    [ExpansionGroupPathKey] = pair.Key.GroupPath,
+                    [ExpansionExpandedKey] = pair.Value
+                };
+                if (pair.Key.WorldId.HasValue)
+                {
+                    stateTag[WorldIdKey] = pair.Key.WorldId.Value.ToString("N");
+                }
+
+                stateTags.Add(stateTag);
+            }
+
+            return stateTags;
+        }
+
+        /// <summary>
+        /// 从人物存档恢复分组状态；旧存档缺少该字段时返回空状态，损坏条目独立跳过。
+        /// </summary>
+        private static StatisticsExpansionStateStore DeserializeExpansionStates(TagCompound root)
+        {
+            StatisticsExpansionStateStore store = new StatisticsExpansionStateStore();
+            if (!root.ContainsKey(ExpansionStatesKey))
+            {
+                return store;
+            }
+
+            IList<TagCompound> stateTags;
+            try
+            {
+                stateTags = root.GetList<TagCompound>(ExpansionStatesKey);
+            }
+            catch (Exception exception) when (IsRecoverableDataError(exception))
+            {
+                return store;
+            }
+
+            int stateCount = Math.Min(stateTags.Count, MaximumExpansionStateCount);
+            for (int index = 0; index < stateCount; index++)
+            {
+                TagCompound stateTag = stateTags[index];
+                if (stateTag == null || !stateTag.ContainsKey(ExpansionExpandedKey))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    string tabKey = stateTag.GetString(ExpansionTabKey);
+                    string groupPath = stateTag.GetString(ExpansionGroupPathKey);
+                    if (tabKey.Length == 0
+                        || tabKey.Length > MaximumExpansionTabKeyLength
+                        || groupPath.Length == 0
+                        || groupPath.Length > MaximumExpansionGroupPathLength)
+                    {
+                        continue;
+                    }
+
+                    Guid? worldId = null;
+                    if (stateTag.ContainsKey(WorldIdKey))
+                    {
+                        if (!Guid.TryParse(stateTag.GetString(WorldIdKey), out Guid parsedWorldId))
+                        {
+                            continue;
+                        }
+
+                        worldId = parsedWorldId;
+                    }
+
+                    store.AddLoadedState(
+                        new StatisticsExpansionStateKey(tabKey, groupPath, worldId),
+                        stateTag.GetBool(ExpansionExpandedKey));
+                }
+                catch (Exception exception) when (IsRecoverableDataError(exception))
+                {
+                    // 单个 UI 状态损坏不应阻止人物统计和其他有效折叠状态加载。
+                }
+            }
+
+            return store;
+        }
+
+        /// <summary>
         /// 将单个查看范围序列化，并按稳定键排序以保证输出可复现。
         /// </summary>
         private static TagCompound SerializeScope(StatisticsData data)
         {
             List<TagCompound> entryTags = new List<TagCompound>();
             IEnumerable<KeyValuePair<StatisticKey, StatisticMetrics>> orderedEntries = data.Entries
-                .Where(pair => !pair.Value.IsZero)
+                .Where(pair => IsPersistentEntry(pair.Key, pair.Value))
                 .OrderBy(pair => pair.Key.StatisticId, StringComparer.Ordinal)
                 .ThenBy(pair => pair.Key.Content?.ModName ?? string.Empty, StringComparer.Ordinal)
                 .ThenBy(pair => pair.Key.Content?.ContentName ?? string.Empty, StringComparer.Ordinal)
@@ -353,9 +501,26 @@ namespace ComprehensiveStatistics.Common.Statistics
                 DateTimeOffset startedAtUtc =
                     DateTimeOffset.FromUnixTimeMilliseconds(tag.GetLong(StartedAtKey));
                 StatisticsData loadedData = new StatisticsData(formatVersion, startedAtUtc);
-                foreach (TagCompound entryTag in tag.GetList<TagCompound>(EntriesKey))
+                IList<TagCompound> entryTags = Array.Empty<TagCompound>();
+                if (tag.ContainsKey(EntriesKey))
                 {
-                    if (TryDeserializeEntry(entryTag, out StatisticKey key, out StatisticMetrics metrics))
+                    try
+                    {
+                        entryTags = tag.GetList<TagCompound>(EntriesKey);
+                    }
+                    catch (Exception exception) when (IsRecoverableDataError(exception))
+                    {
+                        // 条目列表损坏时保留有效的范围元数据，并按空统计继续加载。
+                    }
+                }
+
+                int entryCount = Math.Min(entryTags.Count, MaximumStoredEntryCount);
+                for (int index = 0; index < entryCount; index++)
+                {
+                    if (TryDeserializeEntry(
+                        entryTags[index],
+                        out StatisticKey key,
+                        out StatisticMetrics metrics))
                     {
                         // 重复键按增量合并，损坏存档不会覆盖先前已经读到的有效值。
                         loadedData.Add(key, metrics);
@@ -381,6 +546,10 @@ namespace ComprehensiveStatistics.Common.Statistics
         {
             key = default;
             metrics = default;
+            if (tag == null)
+            {
+                return false;
+            }
 
             try
             {
@@ -392,23 +561,16 @@ namespace ComprehensiveStatistics.Common.Statistics
                     return false;
                 }
 
-                StableContentKey? content = hasContentMod
-                    ? new StableContentKey(
-                        tag.GetString(ContentModKey),
-                        tag.GetString(ContentNameKey))
-                    : null;
-                StatisticMetrics loadedMetrics = new StatisticMetrics(
+                return TryCreateEntry(
+                    statisticId,
+                    hasContentMod ? tag.GetString(ContentModKey) : null,
+                    hasContentName ? tag.GetString(ContentNameKey) : null,
+                    tag.GetString(StyleKey),
                     tag.GetLong(EventsKey),
                     tag.GetLong(UnitsKey),
-                    tag.GetLong(AmountKey));
-                if (loadedMetrics.IsZero)
-                {
-                    return false;
-                }
-
-                key = new StatisticKey(statisticId, content, tag.GetString(StyleKey));
-                metrics = loadedMetrics;
-                return true;
+                    tag.GetLong(AmountKey),
+                    out key,
+                    out metrics);
             }
             catch (Exception exception) when (IsRecoverableDataError(exception))
             {
@@ -417,13 +579,93 @@ namespace ComprehensiveStatistics.Common.Statistics
         }
 
         /// <summary>
+        /// 验证持久化键和三个非负指标，并创建一条可安全加载的正式统计记录。
+        /// </summary>
+        private static bool TryCreateEntry(
+            string statisticId,
+            string contentMod,
+            string contentName,
+            string style,
+            long events,
+            long units,
+            long amount,
+            out StatisticKey key,
+            out StatisticMetrics metrics)
+        {
+            key = default;
+            metrics = default;
+            style ??= string.Empty;
+            bool hasContentMod = contentMod != null;
+            bool hasContentName = contentName != null;
+            if (!IsPersistentStatisticId(statisticId)
+                || style.Length > MaximumStyleLength
+                || hasContentMod != hasContentName
+                || (hasContentMod
+                    && (string.IsNullOrWhiteSpace(contentMod)
+                        || string.IsNullOrWhiteSpace(contentName)
+                        || contentMod.Length > MaximumContentKeyPartLength
+                        || contentName.Length > MaximumContentKeyPartLength)))
+            {
+                return false;
+            }
+
+            try
+            {
+                StatisticMetrics loadedMetrics = new StatisticMetrics(
+                    events,
+                    units,
+                    amount);
+                if (loadedMetrics.IsZero)
+                {
+                    return false;
+                }
+
+                StableContentKey? content = hasContentMod
+                    ? new StableContentKey(contentMod, contentName)
+                    : null;
+                key = new StatisticKey(statisticId, content, style);
+                metrics = loadedMetrics;
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 判断条目是否属于应进入正式存档与网络同步的非零统计。
+        /// </summary>
+        private static bool IsPersistentEntry(
+            StatisticKey key,
+            StatisticMetrics metrics)
+        {
+            return !metrics.IsZero && IsPersistentStatisticId(key.StatisticId);
+        }
+
+        /// <summary>
+        /// 排除空键、过长键和开发阶段的 internal 测试键；旧存档中的测试项会被迁移丢弃。
+        /// </summary>
+        private static bool IsPersistentStatisticId(string statisticId)
+        {
+            return !string.IsNullOrWhiteSpace(statisticId)
+                && statisticId.Length <= MaximumStatisticIdLength
+                && !statisticId.StartsWith(
+                    InternalStatisticIdPrefix,
+                    StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// 判断异常是否属于可由损坏或旧式存档触发的预期读取错误。
         /// </summary>
         private static bool IsRecoverableDataError(Exception exception)
         {
             return exception is ArgumentException
+                || exception is FormatException
                 || exception is IOException
-                || exception is InvalidCastException;
+                || exception is InvalidCastException
+                || exception is KeyNotFoundException
+                || exception is OverflowException;
         }
     }
 }

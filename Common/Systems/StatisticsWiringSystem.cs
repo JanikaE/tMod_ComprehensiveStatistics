@@ -1,25 +1,42 @@
+using System.Collections.Generic;
+using ComprehensiveStatistics.Common.Networking;
 using ComprehensiveStatistics.Common.Players;
 using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.GameContent.UI;
+using Terraria.ID;
 using Terraria.ModLoader;
 
 namespace ComprehensiveStatistics.Common.Systems
 {
     /// <summary>
-    /// 将本地玩家的普通和批量布线流程与 WorldGen 的实际格位变化关联，
-    /// 分别记录四种电线及制动器的成功放置和拆除数量。
+    /// 将本地玩家的普通和批量布线候选与服务器观察到的 WorldGen 实际变化关联，
+    /// 分别记录四种电线及制动器经权威端确认的成功放置和拆除数量。
     /// </summary>
     internal sealed class StatisticsWiringSystem : ModSystem
     {
-        // WorldGen 的布线方法本身没有玩家参数。只有它们同步嵌套在本地玩家的
-        // ItemCheck_UseWiringTools 调用中时才允许归因，网络同步和世界逻辑因此被排除。
+        private const int WiringComponentCount = 5;
+
+        // WorldGen 的布线方法本身没有玩家参数。本地调用提供候选变化；服务器入站
+        // MessageBuffer 上下文提供权威发送者，二者逐格匹配后才允许归入人物统计。
         private static Player activeLocalWiringPlayer;
+        private static Player wiringBatchOwner;
         private static int massWiringStepDepth;
+        private static int activeServerMessagePlayer = -1;
+        private static readonly long[] pendingPlacedComponents = new long[WiringComponentCount];
+        private static readonly long[] pendingRemovedComponents = new long[WiringComponentCount];
+        private static readonly List<WiringChangeVerificationEntry> pendingVerificationChanges =
+            new List<WiringChangeVerificationEntry>();
+        private static readonly object serverChangesLock = new object();
+        private static Dictionary<
+            (int X, int Y, WiringComponentKind Component, bool Present),
+            int>[] serverAcceptedChanges;
+        private static ulong[] serverAcceptedChangeUpdates;
 
         public override void Load()
         {
+            On_MessageBuffer.GetData += HandleNetworkMessage;
             On_Player.ItemCheck_UseWiringTools += HandleUseWiringTools;
             On_Wiring.MassWireOperationStep += HandleMassWireOperationStep;
             On_WorldGen.PlaceWire += HandlePlaceRedWire;
@@ -36,6 +53,7 @@ namespace ComprehensiveStatistics.Common.Systems
 
         public override void Unload()
         {
+            On_MessageBuffer.GetData -= HandleNetworkMessage;
             On_Player.ItemCheck_UseWiringTools -= HandleUseWiringTools;
             On_Wiring.MassWireOperationStep -= HandleMassWireOperationStep;
             On_WorldGen.PlaceWire -= HandlePlaceRedWire;
@@ -49,7 +67,79 @@ namespace ComprehensiveStatistics.Common.Systems
             On_WorldGen.KillWire4 -= HandleRemoveYellowWire;
             On_WorldGen.KillActuator -= HandleRemoveActuator;
             activeLocalWiringPlayer = null;
+            wiringBatchOwner = null;
             massWiringStepDepth = 0;
+            activeServerMessagePlayer = -1;
+            serverAcceptedChanges = null;
+            serverAcceptedChangeUpdates = null;
+            ClearPendingWiringChanges();
+        }
+
+        public override void OnWorldLoad()
+        {
+            ResetServerAcceptedChanges();
+        }
+
+        public override void OnWorldUnload()
+        {
+            ResetServerAcceptedChanges();
+        }
+
+        public override void PostUpdateWorld()
+        {
+            if (Main.netMode != NetmodeID.Server
+                || serverAcceptedChanges == null
+                || serverAcceptedChangeUpdates == null
+                || Main.GameUpdateCount % 60UL != 0UL)
+            {
+                return;
+            }
+
+            lock (serverChangesLock)
+            {
+                for (int playerIndex = 0;
+                    playerIndex < serverAcceptedChanges.Length;
+                    playerIndex++)
+                {
+                    if (Main.player[playerIndex]?.active == true
+                        && Main.GameUpdateCount - serverAcceptedChangeUpdates[playerIndex]
+                            <= 300UL)
+                    {
+                        continue;
+                    }
+
+                    serverAcceptedChanges[playerIndex]?.Clear();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 在服务器处理某个客户端的原版入站消息期间保留发送者上下文，
+        /// 使 WorldGen 布线入口的真实状态差可以回归到唯一发起玩家。
+        /// </summary>
+        private static void HandleNetworkMessage(
+            On_MessageBuffer.orig_GetData orig,
+            MessageBuffer self,
+            int start,
+            int length,
+            out int messageType)
+        {
+            int previousPlayer = activeServerMessagePlayer;
+            bool ownsServerMessage = Main.netMode == NetmodeID.Server
+                && self != null
+                && self.whoAmI >= 0
+                && self.whoAmI < Main.maxPlayers
+                && Main.player[self.whoAmI]?.active == true;
+            activeServerMessagePlayer = ownsServerMessage ? self.whoAmI : -1;
+
+            try
+            {
+                orig(self, start, length, out messageType);
+            }
+            finally
+            {
+                activeServerMessagePlayer = previousPlayer;
+            }
         }
 
         /// <summary>
@@ -74,7 +164,11 @@ namespace ComprehensiveStatistics.Common.Systems
                 : 0;
 
             bool? result;
-            massWiringStepDepth++;
+            if (ownsOperation)
+            {
+                massWiringStepDepth++;
+            }
+
             try
             {
                 result = orig(
@@ -86,13 +180,18 @@ namespace ComprehensiveStatistics.Common.Systems
             }
             finally
             {
-                massWiringStepDepth--;
+                if (ownsOperation)
+                {
+                    massWiringStepDepth--;
+                }
             }
 
             if (ownsOperation)
             {
                 RecordComponentMaskChanges(
                     player,
+                    position.X,
+                    position.Y,
                     beforeMask,
                     GetComponentMask(position.X, position.Y));
             }
@@ -114,6 +213,13 @@ namespace ComprehensiveStatistics.Common.Systems
                 && !Main.gameMenu
                 && player?.active == true
                 && player.whoAmI == Main.myPlayer;
+            bool startsBatch = ownsOperation && wiringBatchOwner == null;
+            if (startsBatch)
+            {
+                wiringBatchOwner = player;
+                ClearPendingWiringChanges();
+            }
+
             activeLocalWiringPlayer = ownsOperation ? player : null;
 
             try
@@ -122,6 +228,12 @@ namespace ComprehensiveStatistics.Common.Systems
             }
             finally
             {
+                if (startsBatch)
+                {
+                    FlushPendingWiringChanges(player);
+                    wiringBatchOwner = null;
+                }
+
                 activeLocalWiringPlayer = previousPlayer;
             }
         }
@@ -277,7 +389,7 @@ namespace ComprehensiveStatistics.Common.Systems
         {
             Player player = activeLocalWiringPlayer;
             if (massWiringStepDepth > 0
-                || player == null
+                || (player == null && activeServerMessagePlayer < 0)
                 || !WorldGen.InWorld(x, y))
             {
                 return;
@@ -289,8 +401,24 @@ namespace ComprehensiveStatistics.Common.Systems
                 return;
             }
 
-            player.GetModPlayer<StatisticsPlayer>()
-                .RecordWiringComponentChange(component, placed: after);
+            if (player != null)
+            {
+                AccumulateOrRecordComponentChange(
+                    player,
+                    x,
+                    y,
+                    component,
+                    placed: after);
+            }
+            else
+            {
+                RecordServerAcceptedChange(
+                    activeServerMessagePlayer,
+                    x,
+                    y,
+                    component,
+                    present: after);
+            }
         }
 
         /// <summary>
@@ -298,6 +426,8 @@ namespace ComprehensiveStatistics.Common.Systems
         /// </summary>
         private static void RecordComponentMaskChanges(
             Player player,
+            int x,
+            int y,
             int beforeMask,
             int afterMask)
         {
@@ -307,15 +437,253 @@ namespace ComprehensiveStatistics.Common.Systems
                 return;
             }
 
-            StatisticsPlayer statisticsPlayer = player.GetModPlayer<StatisticsPlayer>();
-            foreach (WiringComponentKind component in System.Enum.GetValues<WiringComponentKind>())
+            for (int componentIndex = 0;
+                componentIndex < WiringComponentCount;
+                componentIndex++)
             {
+                WiringComponentKind component = (WiringComponentKind)componentIndex;
                 int componentMask = 1 << (int)component;
                 if ((changedMask & componentMask) != 0)
                 {
-                    statisticsPlayer.RecordWiringComponentChange(
+                    AccumulateOrRecordComponentChange(
+                        player,
+                        x,
+                        y,
                         component,
                         placed: (afterMask & componentMask) != 0);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 在一次玩家布线调用内累计变化；多人客户端保留逐格候选，单人使用定长数组。
+        /// </summary>
+        private static void AccumulateOrRecordComponentChange(
+            Player player,
+            int x,
+            int y,
+            WiringComponentKind component,
+            bool placed)
+        {
+            int componentIndex = (int)component;
+            if (ReferenceEquals(player, wiringBatchOwner)
+                && componentIndex >= 0
+                && componentIndex < WiringComponentCount)
+            {
+                long[] pendingCounts = placed
+                    ? pendingPlacedComponents
+                    : pendingRemovedComponents;
+                if (pendingCounts[componentIndex] < long.MaxValue)
+                {
+                    pendingCounts[componentIndex]++;
+                }
+
+                if (Main.netMode == NetmodeID.MultiplayerClient)
+                {
+                    pendingVerificationChanges.Add(
+                        new WiringChangeVerificationEntry(
+                            x,
+                            y,
+                            component,
+                            expectedPresent: placed));
+                }
+
+                return;
+            }
+
+            if (Main.netMode == NetmodeID.MultiplayerClient)
+            {
+                StatisticsNetcode.RequestWiringChangeVerification(
+                    new[]
+                    {
+                        new WiringChangeVerificationEntry(
+                            x,
+                            y,
+                            component,
+                            expectedPresent: placed)
+                    });
+            }
+            else
+            {
+                player.GetModPlayer<StatisticsPlayer>()
+                    .RecordWiringComponentChanges(component, placed, count: 1L);
+            }
+        }
+
+        /// <summary>
+        /// 结束一次布线工具调用：单人提交分类数量，多人将逐格候选发给服务器验证。
+        /// </summary>
+        private static void FlushPendingWiringChanges(Player player)
+        {
+            if (Main.netMode == NetmodeID.MultiplayerClient)
+            {
+                StatisticsNetcode.RequestWiringChangeVerification(
+                    pendingVerificationChanges);
+            }
+            else
+            {
+                StatisticsPlayer statisticsPlayer = player.GetModPlayer<StatisticsPlayer>();
+                for (int componentIndex = 0;
+                    componentIndex < WiringComponentCount;
+                    componentIndex++)
+                {
+                    WiringComponentKind component = (WiringComponentKind)componentIndex;
+                    statisticsPlayer.RecordWiringComponentChanges(
+                        component,
+                        placed: true,
+                        pendingPlacedComponents[componentIndex]);
+                    statisticsPlayer.RecordWiringComponentChanges(
+                        component,
+                        placed: false,
+                        pendingRemovedComponents[componentIndex]);
+                }
+            }
+
+            ClearPendingWiringChanges();
+        }
+
+        /// <summary>
+        /// 清空定长布线批次，避免热重载或嵌套调用留下旧数量。
+        /// </summary>
+        private static void ClearPendingWiringChanges()
+        {
+            System.Array.Clear(pendingPlacedComponents, 0, pendingPlacedComponents.Length);
+            System.Array.Clear(pendingRemovedComponents, 0, pendingRemovedComponents.Length);
+            pendingVerificationChanges.Clear();
+        }
+
+        /// <summary>
+        /// 在服务器或单人权威世界读取指定格位组件的最终状态，供多人布线确认使用。
+        /// </summary>
+        internal static bool TryGetAuthoritativeComponentState(
+            int x,
+            int y,
+            WiringComponentKind component,
+            out bool present)
+        {
+            present = false;
+            if (!WorldGen.InWorld(x, y)
+                || (int)component < 0
+                || (int)component >= WiringComponentCount)
+            {
+                return false;
+            }
+
+            Tile tile = Framing.GetTileSafely(x, y);
+            present = component switch
+            {
+                WiringComponentKind.RedWire => tile.RedWire,
+                WiringComponentKind.BlueWire => tile.BlueWire,
+                WiringComponentKind.GreenWire => tile.GreenWire,
+                WiringComponentKind.YellowWire => tile.YellowWire,
+                WiringComponentKind.Actuator => tile.HasActuator,
+                _ => false
+            };
+            return true;
+        }
+
+        /// <summary>
+        /// 消耗服务器在该玩家入站消息中实际观察到的一次匹配布线变化；
+        /// 没有真实前后差值或已经确认过的候选不会再次通过。
+        /// </summary>
+        internal static bool ConsumeServerAcceptedChange(
+            int playerIndex,
+            int x,
+            int y,
+            WiringComponentKind component,
+            bool present)
+        {
+            if (Main.netMode != NetmodeID.Server
+                || serverAcceptedChanges == null
+                || playerIndex < 0
+                || playerIndex >= serverAcceptedChanges.Length)
+            {
+                return false;
+            }
+
+            (int X, int Y, WiringComponentKind Component, bool Present) key =
+                (x, y, component, present);
+            lock (serverChangesLock)
+            {
+                Dictionary<
+                    (int X, int Y, WiringComponentKind Component, bool Present),
+                    int> changes = serverAcceptedChanges[playerIndex];
+                if (changes == null
+                    || !changes.TryGetValue(key, out int remaining)
+                    || remaining <= 0)
+                {
+                    return false;
+                }
+
+                if (remaining == 1)
+                {
+                    changes.Remove(key);
+                }
+                else
+                {
+                    changes[key] = remaining - 1;
+                }
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// 保存服务器在客户端原版消息中确认的真实组件差值，等待对应候选包逐项领取。
+        /// </summary>
+        private static void RecordServerAcceptedChange(
+            int playerIndex,
+            int x,
+            int y,
+            WiringComponentKind component,
+            bool present)
+        {
+            if (Main.netMode != NetmodeID.Server
+                || serverAcceptedChanges == null
+                || playerIndex < 0
+                || playerIndex >= serverAcceptedChanges.Length)
+            {
+                return;
+            }
+
+            (int X, int Y, WiringComponentKind Component, bool Present) key =
+                (x, y, component, present);
+            lock (serverChangesLock)
+            {
+                Dictionary<
+                    (int X, int Y, WiringComponentKind Component, bool Present),
+                    int> changes = serverAcceptedChanges[playerIndex] ??=
+                        new Dictionary<
+                            (int X, int Y, WiringComponentKind Component, bool Present),
+                            int>();
+                changes.TryGetValue(key, out int existingCount);
+                if (existingCount < int.MaxValue)
+                {
+                    changes[key] = existingCount + 1;
+                }
+
+                serverAcceptedChangeUpdates[playerIndex] = Main.GameUpdateCount;
+            }
+        }
+
+        /// <summary>
+        /// 为当前世界建立空的服务器确认缓存；该缓存从不跨世界或热重载复用。
+        /// </summary>
+        private static void ResetServerAcceptedChanges()
+        {
+            lock (serverChangesLock)
+            {
+                if (Main.netMode == NetmodeID.Server)
+                {
+                    serverAcceptedChanges = new Dictionary<
+                        (int X, int Y, WiringComponentKind Component, bool Present),
+                        int>[Main.maxPlayers];
+                    serverAcceptedChangeUpdates = new ulong[Main.maxPlayers];
+                }
+                else
+                {
+                    serverAcceptedChanges = null;
+                    serverAcceptedChangeUpdates = null;
                 }
             }
         }
@@ -336,28 +704,24 @@ namespace ComprehensiveStatistics.Common.Systems
         }
 
         /// <summary>
-        /// 在本地玩家布线作用域内读取一种组件的独立存在状态；其他来源直接返回 false，
-        /// 避免世界生成和网络同步的布线调用产生额外格位读取开销。
+        /// 在本地玩家工具作用域或服务器玩家入站消息作用域内读取组件状态；
+        /// 其他来源直接返回 false，避免世界生成和普通网络同步产生额外读取与归因。
         /// </summary>
         private static bool GetComponentState(int x, int y, WiringComponentKind component)
         {
             if (massWiringStepDepth > 0
-                || activeLocalWiringPlayer == null
+                || (activeLocalWiringPlayer == null && activeServerMessagePlayer < 0)
                 || !WorldGen.InWorld(x, y))
             {
                 return false;
             }
 
-            Tile tile = Framing.GetTileSafely(x, y);
-            return component switch
-            {
-                WiringComponentKind.RedWire => tile.RedWire,
-                WiringComponentKind.BlueWire => tile.BlueWire,
-                WiringComponentKind.GreenWire => tile.GreenWire,
-                WiringComponentKind.YellowWire => tile.YellowWire,
-                WiringComponentKind.Actuator => tile.HasActuator,
-                _ => false
-            };
+            return TryGetAuthoritativeComponentState(
+                x,
+                y,
+                component,
+                out bool present)
+                && present;
         }
     }
 }

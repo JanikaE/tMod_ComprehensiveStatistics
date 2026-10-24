@@ -644,16 +644,6 @@ namespace ComprehensiveStatistics.Common.Statistics
     }
 
     /// <summary>
-    /// 集中保存开发阶段使用的临时统计键，避免测试项与正式统计键发生碰撞。
-    /// </summary>
-    internal static class InternalStatisticKeys
-    {
-        // B2 验收完成后暂时保留到发布前整理；正式发布时必须移除该测试项及其 UI。
-        internal static readonly StatisticKey B2WorldEntries =
-            new StatisticKey("internal/b2-world-entries");
-    }
-
-    /// <summary>
     /// 唯一标识一项统计；可选内容键与样式键用于区分内容明细和多格物体样式。
     /// </summary>
     internal readonly struct StatisticKey : IEquatable<StatisticKey>

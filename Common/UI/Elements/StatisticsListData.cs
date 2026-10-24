@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework.Graphics;
@@ -208,6 +209,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
     {
         private readonly string name;
         private readonly string localizationKey;
+        private readonly string stateKey;
 
         /// <summary>
         /// 创建一个分组，并从全部直接子项和子分组计算合计值。
@@ -224,7 +226,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             Asset<Texture2D> icon = null,
             StatisticsIconKind iconKind = StatisticsIconKind.None,
             int amountIconType = 0,
-            Asset<Texture2D> amountIcon = null)
+            Asset<Texture2D> amountIcon = null,
+            string stateKey = null)
         {
             if (nameIsLocalizationKey)
             {
@@ -249,6 +252,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             IconKind = icon == null ? StatisticsIconKind.None : iconKind;
             AmountIconType = amountIconType;
             AmountIcon = amountIcon;
+            this.stateKey = stateKey ?? localizationKey ?? name;
+            if (string.IsNullOrEmpty(this.stateKey))
+            {
+                throw new ArgumentException("A stable group state key is required.", nameof(stateKey));
+            }
 
             CalculateTotals();
         }
@@ -307,7 +315,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
         internal bool DefaultIsExpanded { get; }
 
-        internal string StateKey => localizationKey ?? name;
+        internal string StateKey => stateKey;
 
         internal StatisticsMetricDisplay? MetricDisplay { get; }
 

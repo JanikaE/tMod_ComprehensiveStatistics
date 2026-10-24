@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ComprehensiveStatistics.Common.Players;
 using ComprehensiveStatistics.Common.UI;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -80,7 +81,12 @@ namespace ComprehensiveStatistics.Common.Systems
 
             Main.playerInventory = false;
             selectedItemBeforeOpen = Main.LocalPlayer.selectedItem;
-            // 折叠和排序只属于一次窗口会话；切换 Tab 时保留，重新打开时恢复默认。
+            // 高频事件最多按秒批量写入；打开窗口前强制提交，页面始终读取完整最新值。
+            Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().FlushPendingStatistics();
+            // 多人客户端每次打开窗口都重新获取权威世界快照；带修订号的后续增量
+            // 会在快照到达前暂停应用，避免重连或包交错造成重复和丢失。
+            ModContent.GetInstance<StatisticsWorldSystem>().RequestSynchronizedSnapshot();
+            // 排序只属于一次窗口会话；折叠状态会在运行时数据启用后从人物存档恢复。
             statisticsWindowState.ResetTransientViewState();
             statisticsWindowInterface.SetState(statisticsWindowState);
             // UIState 会在模组加载阶段预激活；只有玩家实际打开窗口后，ModPlayer
