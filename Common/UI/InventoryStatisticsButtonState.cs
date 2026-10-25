@@ -4,8 +4,6 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
 using Terraria;
-using Terraria.GameContent.UI.Elements;
-using Terraria.ID;
 using Terraria.Localization;
 using Terraria.ModLoader;
 using Terraria.ModLoader.UI;
@@ -18,29 +16,23 @@ namespace ComprehensiveStatistics.Common.UI
     /// </summary>
     internal sealed class InventoryStatisticsButtonState : UIState
     {
-        private const float ButtonSize = 44f;
+        private const float ButtonSize = 34f;
 
-        private UIPanel buttonPanel;
+        private InventoryIconButton buttonPanel;
         private bool isDragging;
         private Vector2 dragOffset;
 
         public override void OnInitialize()
         {
-            buttonPanel = new UIPanel();
+            Asset<Texture2D> iconTexture = ModContent
+                .GetInstance<global::ComprehensiveStatistics.ComprehensiveStatistics>()
+                .SmallModIcon;
+            Asset<Texture2D> hoverOutlineTexture = ModContent.Request<Texture2D>(
+                "ComprehensiveStatistics/Assets/UI/InventoryStatisticsButtonOutline");
+            buttonPanel = new InventoryIconButton(iconTexture, hoverOutlineTexture);
             buttonPanel.Width.Set(ButtonSize, 0f);
             buttonPanel.Height.Set(ButtonSize, 0f);
-            buttonPanel.SetPadding(5f);
-            buttonPanel.BackgroundColor = new Color(63, 82, 151, 220);
-            buttonPanel.BorderColor = new Color(89, 116, 213, 255);
             buttonPanel.OnLeftClick += OpenStatistics;
-
-            Asset<Texture2D> iconTexture = ModContent.Request<Texture2D>($"Terraria/Images/Item_{ItemID.TallyCounter}");
-            UIImage icon = new UIImage(iconTexture);
-            icon.Width.Set(32f, 0f);
-            icon.Height.Set(32f, 0f);
-            icon.HAlign = 0.5f;
-            icon.VAlign = 0.5f;
-            buttonPanel.Append(icon);
 
             Append(buttonPanel);
         }
@@ -59,11 +51,6 @@ namespace ComprehensiveStatistics.Common.UI
             if (buttonPanel.IsMouseHovering || isDragging)
             {
                 Main.LocalPlayer.mouseInterface = true;
-                buttonPanel.BackgroundColor = new Color(83, 108, 198, 235);
-            }
-            else
-            {
-                buttonPanel.BackgroundColor = new Color(63, 82, 151, 220);
             }
 
             base.Update(gameTime);
@@ -181,6 +168,45 @@ namespace ComprehensiveStatistics.Common.UI
         private static void OpenStatistics(UIMouseEvent evt, UIElement listeningElement)
         {
             ModContent.GetInstance<StatisticsUISystem>().Open();
+        }
+
+        /// <summary>
+        /// 直接绘制模组小图标，并在悬停时沿贴图轮廓添加黄色像素描边。
+        /// </summary>
+        private sealed class InventoryIconButton : UIElement
+        {
+            private readonly Asset<Texture2D> texture;
+            private readonly Asset<Texture2D> hoverOutlineTexture;
+
+            /// <summary>
+            /// 创建不带面板底图的物品栏统计入口。
+            /// </summary>
+            public InventoryIconButton(
+                Asset<Texture2D> texture,
+                Asset<Texture2D> hoverOutlineTexture)
+            {
+                this.texture = texture;
+                this.hoverOutlineTexture = hoverOutlineTexture;
+            }
+
+            protected override void DrawSelf(SpriteBatch spriteBatch)
+            {
+                Texture2D icon = texture.Value;
+                CalculatedStyle dimensions = GetDimensions();
+                Vector2 drawPosition = new Vector2(
+                    dimensions.X + (dimensions.Width - icon.Width) * 0.5f,
+                    dimensions.Y + (dimensions.Height - icon.Height) * 0.5f);
+
+                if (IsMouseHovering)
+                {
+                    spriteBatch.Draw(
+                        hoverOutlineTexture.Value,
+                        drawPosition - Vector2.One,
+                        Color.White);
+                }
+
+                spriteBatch.Draw(icon, drawPosition, Color.White);
+            }
         }
     }
 }

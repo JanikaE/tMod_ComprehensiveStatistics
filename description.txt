@@ -1,1 +1,3 @@
-Tracks detailed character and world statistics for blocks, items, ammunition, interactions, NPC kills, economy, fishing, bait, movement, and survival. Includes searchable and sortable tables, per-world character views, multiplayer-safe world statistics, and Simplified Chinese and English localization.
+Comprehensive Statistics adds a searchable statistics window for your character career and the current world. Track blocks, items, ammunition, interactions, kills, economy, fishing, bait, movement, deaths, life lost, and more. Supports vanilla and modded content, single-player, and multiplayer. Statistics only begin after the mod is enabled; earlier activity cannot be recovered.
+
+综合统计为角色生涯与当前世界提供可搜索的统计窗口，记录物块、物品、弹药、交互、击杀、经济、钓鱼、鱼饵、移动、死亡与掉血等内容。支持原版与模组内容、单人及多人游戏。统计只会从启用模组后开始，无法补记此前的活动。
