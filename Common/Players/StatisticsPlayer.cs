@@ -9,6 +9,7 @@ using Terraria.DataStructures;
 using Terraria.ID;
 using Terraria.ModLoader;
 using Terraria.ModLoader.IO;
+using Terraria.ObjectData;
 
 namespace ComprehensiveStatistics.Common.Players
 {
@@ -49,6 +50,7 @@ namespace ComprehensiveStatistics.Common.Players
         private bool hasMovementSnapshot;
         private Vector2 previousMovementPosition;
         private MovementModeKind previousMovementMode;
+        private StableContentKey? previousMovementContent;
         private bool hasPreMovementMode;
         private MovementModeKind preMovementMode;
         private StableContentKey? preMovementContent;
@@ -1082,8 +1084,9 @@ namespace ComprehensiveStatistics.Common.Players
                 return;
             }
 
-            // 原版 GrappleMovement 已在此回调之前完成，钩爪数组仍代表本帧实际采用的
-            // 牵引状态；到 PostUpdate 时部分钩爪会清理该状态，因此必须在位移前快照。
+            // 此回调位于重力更新之后、位置与碰撞结算之前。这里仍需快照钩爪等可能在
+            // PostUpdate 前清理的特殊状态，但基础移动类别不能直接采用这个快照：接地
+            // 玩家此时也可能已有向下速度，真正落地状态要等碰撞结算后才能确认。
             preMovementMode = ClassifyCurrentMovementMode(out preMovementContent);
             hasPreMovementMode = true;
         }
@@ -1339,18 +1342,24 @@ namespace ComprehensiveStatistics.Common.Players
             Vector2 currentPosition = Player.position;
             MovementModeKind currentMovementMode = ClassifyCurrentMovementMode(
                 out StableContentKey? currentMovementContent);
-            MovementModeKind movementModeBeforePositionUpdate = hasPreMovementMode
+            bool usePreMovementSnapshot = hasPreMovementMode
+                && RequiresPreMovementSnapshot(preMovementMode);
+            MovementModeKind movementModeBeforePositionUpdate = usePreMovementSnapshot
                 ? preMovementMode
                 : previousMovementMode;
-            StableContentKey? movementContentBeforePositionUpdate = hasPreMovementMode
+            StableContentKey? movementContentBeforePositionUpdate = usePreMovementSnapshot
                 ? preMovementContent
-                : null;
+                : previousMovementContent;
+            bool hadPreMovementSnapshot = hasPreMovementMode;
+            MovementModeKind movementModeAtPreUpdate = preMovementMode;
+            StableContentKey? movementContentAtPreUpdate = preMovementContent;
             hasPreMovementMode = false;
             preMovementContent = null;
             if (!hasMovementSnapshot)
             {
                 previousMovementPosition = currentPosition;
                 previousMovementMode = currentMovementMode;
+                previousMovementContent = currentMovementContent;
                 hasMovementSnapshot = true;
                 return;
             }
@@ -1365,9 +1374,12 @@ namespace ComprehensiveStatistics.Common.Players
                 ? movementContentBeforePositionUpdate
                 : currentMovementMode == movementMode
                     ? currentMovementContent
-                    : null;
+                    : hadPreMovementSnapshot && movementModeAtPreUpdate == movementMode
+                        ? movementContentAtPreUpdate
+                        : null;
             previousMovementPosition = currentPosition;
             previousMovementMode = currentMovementMode;
+            previousMovementContent = currentMovementContent;
 
             // NaN、Infinity 和异常跨度均不能污染长期存档；下一帧仍从当前位置继续。
             if (!float.IsFinite(distance)
@@ -1681,8 +1693,15 @@ namespace ComprehensiveStatistics.Common.Players
                         continue;
                     }
 
-                    int style = Math.Max(tile.TileFrameX / 18, 0);
-                    int itemType = TileLoader.GetItemDropFromTypeAndStyle(tileType, style);
+                    int itemType = GetVanillaRopeItemType(tileType);
+                    if (itemType == ItemID.None && tileType >= TileID.Count)
+                    {
+                        // 原版每种绳索使用独立 TileID，而 FrameX 表示连接外观，不是
+                        // 来源物品样式。模组绳索才按实际 TileObjectData 样式查询注册掉落。
+                        int style = Math.Max(TileObjectData.GetTileStyle(tile), 0);
+                        itemType = TileLoader.GetItemDropFromTypeAndStyle(tileType, style);
+                    }
+
                     if (itemType > ItemID.None)
                     {
                         return itemType;
@@ -1691,6 +1710,23 @@ namespace ComprehensiveStatistics.Common.Players
             }
 
             return 0;
+        }
+
+        /// <summary>
+        /// 将原版可攀附绳索物块映射到实际放置物品；物块帧只表示连接外观，不能作为样式。
+        /// </summary>
+        private static int GetVanillaRopeItemType(int tileType)
+        {
+            return tileType switch
+            {
+                TileID.Rope => ItemID.Rope,
+                TileID.Chain => ItemID.Chain,
+                TileID.VineRope => ItemID.VineRope,
+                TileID.SilkRope => ItemID.SilkRope,
+                TileID.WebRope => ItemID.WebRope,
+                TileID.MysticSnakeRope => ItemID.MysticCoilSnake,
+                _ => ItemID.None
+            };
         }
 
         /// <summary>
@@ -1750,6 +1786,14 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
+        /// 判断一个类别是否会在 PostUpdate 前由原版清理，需要优先采用 PreUpdateMovement 快照。
+        /// </summary>
+        private static bool RequiresPreMovementSnapshot(MovementModeKind mode)
+        {
+            return mode == MovementModeKind.GrapplingHook;
+        }
+
+        /// <summary>
         /// 判断移动类别是否要求按实际来源物品保存明细。
         /// </summary>
         private static bool IsItemDetailedMovementMode(MovementModeKind mode)
@@ -1770,6 +1814,7 @@ namespace ComprehensiveStatistics.Common.Players
             hasMovementSnapshot = false;
             previousMovementPosition = Vector2.Zero;
             previousMovementMode = default;
+            previousMovementContent = null;
             hasPreMovementMode = false;
             preMovementMode = default;
             preMovementContent = null;
