@@ -145,6 +145,8 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal StatisticsExpansionStateStore ExpansionStates { get; }
 
+        internal StatisticsListViewStateStore ListViewStates { get; } = new();
+
         /// <summary>
         /// 获取指定世界切片；不存在时以当前时间创建。
         /// </summary>

@@ -130,6 +130,20 @@ namespace ComprehensiveStatistics.Common.Players
                 states);
         }
 
+        /// <summary>读取当前人物在指定 Tab 与范围中的排序及滚动快照。</summary>
+        internal StatisticsListViewState GetSavedListViewState(string tabKey, bool currentWorld)
+        {
+            if (currentWorld) EnsureCurrentWorldSlice();
+            return Data.ListViewStates.GetTabState(tabKey, currentWorld ? currentWorldId : null);
+        }
+
+        /// <summary>用户改变视图时立即更新人物内存数据，自动保存可直接持久化最新状态。</summary>
+        internal void SaveListViewState(string tabKey, bool currentWorld, StatisticsListViewState state)
+        {
+            if (currentWorld) EnsureCurrentWorldSlice();
+            Data.ListViewStates.SetTabState(tabKey, currentWorld ? currentWorldId : null, state);
+        }
+
         public override void Initialize()
         {
             Data = new CharacterStatisticsData(DateTimeOffset.UtcNow);

@@ -86,7 +86,7 @@ namespace ComprehensiveStatistics.Common.Systems
             // 多人客户端每次打开窗口都重新获取权威世界快照；带修订号的后续增量
             // 会在快照到达前暂停应用，避免重连或包交错造成重复和丢失。
             ModContent.GetInstance<StatisticsWorldSystem>().RequestSynchronizedSnapshot();
-            // 排序只属于一次窗口会话；折叠状态会在运行时数据启用后从人物存档恢复。
+            // 先清除旧人物视图；折叠、排序和滚动位置在运行时数据启用后从人物存档恢复。
             statisticsWindowState.ResetTransientViewState();
             statisticsWindowInterface.SetState(statisticsWindowState);
             // UIState 会在模组加载阶段预激活；只有玩家实际打开窗口后，ModPlayer

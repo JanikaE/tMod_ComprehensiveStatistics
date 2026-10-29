@@ -114,8 +114,7 @@ namespace ComprehensiveStatistics.Common.UI
             && Main.LocalPlayer?.active == true;
 
         /// <summary>
-        /// 开始一次新的窗口会话，清除旧人物的内存折叠状态并恢复无排序状态；
-        /// 当前人物的持久化折叠状态会在运行时数据可用后重新加载。
+        /// 开始新的窗口会话并清除旧人物的内存视图；当前人物的持久化视图随后重新加载。
         /// </summary>
         internal void ResetTransientViewState()
         {
@@ -327,6 +326,7 @@ namespace ComprehensiveStatistics.Common.UI
             {
                 statisticsList.ExpansionStateChanged += UpdateExpandCollapseButton;
                 statisticsList.ExpansionStateCommitted += SaveActiveExpansionState;
+                statisticsList.ViewStateCommitted += SaveActiveListViewState;
             }
 
             toolbar = new StatisticsToolbar(
@@ -602,8 +602,19 @@ namespace ComprehensiveStatistics.Common.UI
                 activeList.GetExpansionStates());
         }
 
+        /// <summary>立即保存当前 Tab 的排序与滚动快照，无需等待窗口关闭。</summary>
+        private void SaveActiveListViewState()
+        {
+            if (!CanReadRuntimeStatistics) return;
+            VirtualizedStatisticsList list = GetActiveStatisticsList();
+            if (list == null) return;
+            Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().SaveListViewState(
+                TabLocalizationKeys[selectedTabIndex],
+                toolbar.Scope == StatisticsViewScope.CharacterCurrentWorld, list.GetViewState());
+        }
+
         /// <summary>
-        /// 从人物存档恢复当前 Tab 在人物生涯或当前世界中的独立折叠状态。
+        /// 从人物存档恢复当前 Tab 在人物生涯或当前世界中的折叠、排序和滚动状态。
         /// </summary>
         private void RestoreActiveExpansionState()
         {
@@ -625,6 +636,9 @@ namespace ComprehensiveStatistics.Common.UI
                     TabLocalizationKeys[selectedTabIndex],
                     currentWorld: scope == StatisticsViewScope.CharacterCurrentWorld);
             activeList.RestoreExpansionStates(savedStates);
+            activeList.RestoreViewState(Main.LocalPlayer.GetModPlayer<StatisticsPlayer>()
+                .GetSavedListViewState(TabLocalizationKeys[selectedTabIndex],
+                    scope == StatisticsViewScope.CharacterCurrentWorld));
         }
 
         /// <summary>

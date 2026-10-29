@@ -31,8 +31,31 @@ internal static class PersistenceChecks
                     new(){["Tab"]="blocks",["GroupPath"]="tiles",["Expanded"]=true,["WorldId"]=b.ToString("N")}}
             };
             object loaded=Read(root);var saved=Save(loaded);
+            Check(saved.GetList<TagCompound>("ListViewStates").Count==0,"legacy save defaults to no view records");
+            root["ListViewStates"]=new List<TagCompound>
+            {
+                View("blocks","Units","Descending",340f),
+                View("blocks","Name","Ascending",68f,a),
+                View("blocks","Events","None",102f,b),
+                View("items","Amount","Descending",170f),
+                View("bad","Name","None",55f,invalidWorld:true),
+                View("negative","Name","None",-1f),
+                View("nonfinite","Name","None",float.NaN)
+            };
+            loaded=Read(root);saved=Save(loaded);
+            var views=saved.GetList<TagCompound>("ListViewStates");
+            Check(views.Count==6,"malformed view isolated without losing valid records");
+            Check(views.Single(t=>t.GetString("Tab")=="blocks"&&!t.ContainsKey("WorldId")).GetFloat("ScrollPosition")==340f,
+                "career view isolated");
+            Check(views.Single(t=>t.GetString("Tab")=="blocks"&&t.ContainsKey("WorldId")&&t.GetString("WorldId")==a.ToString("N")).GetString("SortDirection")=="Ascending",
+                "world A sort isolated");
+            Check(views.Single(t=>t.GetString("Tab")=="blocks"&&t.ContainsKey("WorldId")&&t.GetString("WorldId")==b.ToString("N")).GetString("SortDirection")=="None",
+                "world B retains explicit no sort");
+            Check(views.Single(t=>t.GetString("Tab")=="items").GetFloat("ScrollPosition")==170f,"other tab isolated");
+            Check(views.Where(t=>t.GetString("Tab")=="negative"||t.GetString("Tab")=="nonfinite").All(t=>t.GetFloat("ScrollPosition")==0f),
+                "invalid scroll defaults to top");
             Check(saved.GetInt("FormatVersion")==3,"current root format");
-            Check(!saved.Select(pair=>pair.Key).Except(new[]{"FormatVersion","Career","WorldSlices","ExpansionStates"}).Any(),"runtime compatibility state is not saved");
+            Check(!saved.Select(pair=>pair.Key).Except(new[]{"FormatVersion","Career","WorldSlices","ExpansionStates","ListViewStates"}).Any(),"runtime compatibility state is not saved");
             Check(saved.GetCompound("Career").GetLong("StartedAtUnixMilliseconds")==1234567L
                 &&World(saved,a).GetLong("StartedAtUnixMilliseconds")==1234500L&&World(saved,b).GetLong("StartedAtUnixMilliseconds")==1234600L,"original start times");
             Check(saved.GetList<TagCompound>("ExpansionStates").Count==3
@@ -58,7 +81,16 @@ internal static class PersistenceChecks
             Check((bool)serializer.GetMethod("TryDeserializeWorld",Flags).Invoke(null,worldInput),"world scope reloads");
             Check(Signature(serializer.GetMethod("SerializeWorld",Flags).Invoke(null,new[]{worldInput[1]}))==Signature(world),"world scope round trip");
         }
-        Console.WriteLine($"PERSISTENCE_CHECKS_OK: {checks} assertions; versions 1/2/3, real compressed TagIO, dual scopes, isolated worlds, missing mod content, object styles, wire Events/Units, timestamps and folds");
+        Console.WriteLine($"PERSISTENCE_CHECKS_OK: {checks} assertions; versions 1/2/3, real compressed TagIO, dual scopes, isolated worlds, missing mod content, object styles, wire Events/Units, timestamps, folds and list views");
+    }
+
+    /// <summary>构造独立列表视图及损坏世界标识，验证生产加载器的容错与隔离。</summary>
+    private static TagCompound View(string tab,string column,string direction,float position,Guid? world=null,bool invalidWorld=false)
+    {
+        var tag=new TagCompound{["Tab"]=tab,["SortColumn"]=column,["SortDirection"]=direction,["ScrollPosition"]=position};
+        if(world.HasValue)tag["WorldId"]=world.Value.ToString("N");
+        if(invalidWorld)tag["WorldId"]="invalid";
+        return tag;
     }
 
     /// <summary>提供不同世界的旧累计；旧拆除数不能由放置数倒推。</summary>

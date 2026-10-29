@@ -70,7 +70,8 @@ namespace ComprehensiveStatistics.Common.Statistics
                 [FormatVersionKey] = StatisticsDataFormat.CurrentVersion,
                 [CareerKey] = SerializeScope(data.Career),
                 [WorldSlicesKey] = worldTags,
-                [ExpansionStatesKey] = SerializeExpansionStates(data.ExpansionStates)
+                [ExpansionStatesKey] = SerializeExpansionStates(data.ExpansionStates),
+                ["ListViewStates"] = SerializeListViewStates(data.ListViewStates)
             };
         }
 
@@ -313,6 +314,7 @@ namespace ComprehensiveStatistics.Common.Statistics
                 StatisticsExpansionStateStore expansionStates =
                     DeserializeExpansionStates(root);
                 data = new CharacterStatisticsData(career, worldSlices, expansionStates);
+                DeserializeListViewStates(root, data.ListViewStates);
                 return true;
             }
             catch (Exception exception)
@@ -419,6 +421,57 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
 
             return store;
+        }
+
+        /// <summary>以稳定字符串保存排序枚举，避免未来枚举插入导致旧存档含义变化。</summary>
+        private static List<TagCompound> SerializeListViewStates(StatisticsListViewStateStore store)
+        {
+            return store.Entries.OrderBy(pair => pair.Key.WorldId.HasValue ? 1 : 0)
+                .ThenBy(pair => pair.Key.WorldId ?? Guid.Empty)
+                .ThenBy(pair => pair.Key.Tab, StringComparer.Ordinal)
+                .Select(pair =>
+                {
+                    TagCompound tag = new TagCompound
+                    {
+                        ["Tab"] = pair.Key.Tab,
+                        ["SortColumn"] = pair.Value.SortColumn ?? "Name",
+                        ["SortDirection"] = pair.Value.SortDirection ?? "None",
+                        ["ScrollPosition"] = pair.Value.ScrollPosition
+                    };
+                    if (pair.Key.WorldId.HasValue)
+                        tag[WorldIdKey] = pair.Key.WorldId.Value.ToString("N");
+                    return tag;
+                }).ToList();
+        }
+
+        /// <summary>独立跳过损坏的 UI 条目；缺少可选字段不影响旧统计与折叠状态。</summary>
+        private static void DeserializeListViewStates(TagCompound root, StatisticsListViewStateStore store)
+        {
+            if (!root.ContainsKey("ListViewStates")) return;
+            IList<TagCompound> tags;
+            try { tags = root.GetList<TagCompound>("ListViewStates"); }
+            catch (Exception exception) when (IsRecoverableDataError(exception)) { return; }
+            foreach (TagCompound tag in tags.Take(MaximumExpansionStateCount))
+            {
+                try
+                {
+                    if (tag == null) continue;
+                    string tab = tag.GetString("Tab");
+                    if (tab.Length == 0 || tab.Length > MaximumExpansionTabKeyLength) continue;
+                    Guid? worldId = null;
+                    if (tag.ContainsKey(WorldIdKey))
+                    {
+                        if (!Guid.TryParse(tag.GetString(WorldIdKey), out Guid id)) continue;
+                        worldId = id;
+                    }
+                    store.SetTabState(tab, worldId, new StatisticsListViewState(
+                        tag.GetString("SortColumn"), tag.GetString("SortDirection"), tag.GetFloat("ScrollPosition")));
+                }
+                catch (Exception exception) when (IsRecoverableDataError(exception))
+                {
+                    // 视图损坏不能丢弃人物统计，也不能污染其他范围。
+                }
+            }
         }
 
         /// <summary>

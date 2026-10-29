@@ -45,6 +45,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private int lastRowsNeeded = -1;
         private bool rowsBindingDirty = true;
         private bool isEmptyTextAttached;
+        private float? pendingScrollPosition;
+        private float lastObservedScrollPosition;
+
+        internal event Action ViewStateCommitted;
 
         internal event Action ExpansionStateChanged;
 
@@ -103,13 +107,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             groups.Clear();
             groups.AddRange(newGroups);
             ApplyExpansionStates(groups, parentPath: string.Empty);
-            ApplySort(resetScroll: true);
+            ApplySort(resetScroll: false);
             ExpansionStateChanged?.Invoke();
         }
 
         /// <summary>
-        /// 清除列表内存中的折叠状态并恢复默认值，同时重置本次窗口会话的排序状态。
-        /// 持久化折叠状态会在窗口打开并读取人物数据后重新应用。
+        /// 清除旧人物的内存视图；持久化折叠、排序和滚动状态会在读取当前人物后重新应用。
         /// </summary>
         internal void ResetTransientState()
         {
@@ -119,6 +122,30 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             sortDirection = StatisticsListSortDirection.None;
             ApplySort(resetScroll: true);
             ExpansionStateChanged?.Invoke();
+        }
+
+        /// <summary>捕获排序及滚动快照；布局尚未就绪时保留待恢复位置。</summary>
+        internal StatisticsListViewState GetViewState()
+        {
+            return new StatisticsListViewState(sortColumn.ToString(), sortDirection.ToString(),
+                pendingScrollPosition ?? scrollbar.ViewPosition);
+        }
+
+        /// <summary>恢复有效排序；延后到视口尺寸及内容范围就绪后应用滚动位置。</summary>
+        internal void RestoreViewState(StatisticsListViewState state)
+        {
+            sortColumn = StatisticsListSortColumn.Name;
+            sortDirection = StatisticsListSortDirection.None;
+            if (Enum.TryParse(state.SortColumn, out StatisticsListSortColumn column)
+                && columnHeaders.Any(header => header.Column == column)
+                && Enum.TryParse(state.SortDirection, out StatisticsListSortDirection direction)
+                && Enum.IsDefined(direction))
+            {
+                sortColumn = column;
+                sortDirection = direction;
+            }
+            ApplySort(resetScroll: true);
+            pendingScrollPosition = state.ScrollPosition;
         }
 
         /// <summary>
@@ -185,6 +212,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             float viewportHeight = MathHelper.Max(1f, viewportDimensions.Height);
             float contentHeight = visibleEntries.Count * RowHeight;
             scrollbar.SetView(viewportHeight, MathHelper.Max(viewportHeight, contentHeight));
+            if (pendingScrollPosition.HasValue)
+            {
+                // UIScrollbar 在 SetView 前仍持有旧列表范围，提前赋值会把有效位置错误截断。
+                scrollbar.ViewPosition = MathHelper.Clamp(pendingScrollPosition.Value, 0f,
+                    MathHelper.Max(0f, contentHeight - viewportHeight));
+                pendingScrollPosition = null;
+            }
 
             if (IsMouseHovering)
             {
@@ -204,6 +238,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             EnsureRowPool(viewportHeight);
             BindVisibleRows(viewportHeight);
             base.Update(gameTime);
+            // 滚轮和拖动都在此时完成；只在位置变化时更新人物内存，覆盖自动保存和世界退出。
+            if (lastObservedScrollPosition != scrollbar.ViewPosition)
+            {
+                lastObservedScrollPosition = scrollbar.ViewPosition;
+                ViewStateCommitted?.Invoke();
+            }
         }
 
         public override void OnActivate()
@@ -445,6 +485,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             SetEmptyTextVisible(visibleEntries.Count == 0);
             if (resetScroll)
             {
+                pendingScrollPosition = null;
                 scrollbar.ViewPosition = 0f;
             }
         }
@@ -1004,6 +1045,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             // 排序只改变同层条目的先后，不应打断用户正在查看的滚动位置。
             ApplySort(resetScroll: false);
+            ViewStateCommitted?.Invoke();
             SoundEngine.PlaySound(SoundID.MenuTick);
         }
 
