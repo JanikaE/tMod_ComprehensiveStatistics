@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="WorldStubs.cs" />
+    <Compile Include="../../Common/Statistics/TileContentSnapshot.cs" Link="TileContentSnapshot.cs" />
+    <Compile Include="../../Common/Statistics/TileChangeScope.cs" Link="TileChangeScope.cs" />
+    <Compile Include="../../Common/Statistics/TileChangeResult.cs" Link="TileChangeResult.cs" />
+    <Compile Include="../../Common/Statistics/TileChangeCandidate.cs" Link="TileChangeCandidate.cs" />
+  </ItemGroup>
+</Project>

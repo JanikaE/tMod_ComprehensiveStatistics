@@ -16,6 +16,7 @@ using Terraria.ID;
 using Terraria.Localization;
 using Terraria.Map;
 using Terraria.ModLoader;
+using Terraria.ModLoader.UI;
 using Terraria.ObjectData;
 using Terraria.UI;
 
@@ -50,6 +51,8 @@ namespace ComprehensiveStatistics.Common.UI
         private const float ToolbarHeight = 28f;
         private const float ListTop = 74f;
         private const float ExpandCollapseButtonWidth = 94f;
+        private const float CompatibilityButtonWidth = 26f;
+        private const float CompatibilityButtonGap = 6f;
 
         // 顺序同时决定导航显示顺序，键名用于拼接各 Tab 的本地化路径。
         private static readonly string[] TabLocalizationKeys =
@@ -76,6 +79,7 @@ namespace ComprehensiveStatistics.Common.UI
         private UIText contentDescription;
         private UIText statisticsStartedAt;
         private HeaderActionButton expandCollapseButton;
+        private CompatibilityInfoButton compatibilityInfoButton;
         private StatisticsToolbar toolbar;
         private VirtualizedStatisticsList blockList;
         private VirtualizedStatisticsList itemList;
@@ -211,6 +215,12 @@ namespace ComprehensiveStatistics.Common.UI
             expandCollapseButton.Width.Set(ExpandCollapseButtonWidth, 0f);
             expandCollapseButton.Height.Set(28f, 0f);
             contentPanel.Append(expandCollapseButton);
+
+            compatibilityInfoButton = new CompatibilityInfoButton();
+            compatibilityInfoButton.Left.Set(-ExpandCollapseButtonWidth - CompatibilityButtonGap - CompatibilityButtonWidth, 1f);
+            compatibilityInfoButton.Top.Set(0f, 0f);
+            compatibilityInfoButton.Width.Set(CompatibilityButtonWidth, 0f);
+            compatibilityInfoButton.Height.Set(28f, 0f);
 
             contentTitle = new UIText(string.Empty, 1.08f);
             contentTitle.Left.Set(2f, 0f);
@@ -355,12 +365,20 @@ namespace ComprehensiveStatistics.Common.UI
             UpdateResponsiveLayout();
             UpdateTabColors();
 
-            if (closeButton.IsMouseHovering)
-            {
-                Main.hoverItemName = Language.GetTextValue("Mods.ComprehensiveStatistics.UI.CloseButtonTooltip");
-            }
-
             base.Update(gameTime);
+        }
+
+        public override void Draw(SpriteBatch spriteBatch)
+        {
+            base.Draw(spriteBatch);
+            if (!CanReadRuntimeStatistics) return;
+
+            // 原版 InterfaceLogic3 会在 Update 之后清空 hoverItemName。窗口及其子元素
+            // 绘制完成后使用专用提示接口，既避免被清空，也避免被后画的列表遮挡。
+            if (selectedTabIndex == BlocksTabIndex && compatibilityInfoButton.IsMouseHovering)
+                UICommon.TooltipMouseText(ImproveGameCompatibilityText.Format(ImproveGameMultiplayerSystem.GetDisplayStatus()));
+            else if (closeButton.IsMouseHovering)
+                UICommon.TooltipMouseText(Language.GetTextValue("Mods.ComprehensiveStatistics.UI.CloseButtonTooltip"));
         }
 
         /// <summary>
@@ -642,6 +660,12 @@ namespace ComprehensiveStatistics.Common.UI
             float titleWidth = FontAssets.MouseText.Value.MeasureString(titleText).X * 1.08f;
             float descriptionLeft = titleWidth + 18f;
             float headerButtonsWidth = ExpandCollapseButtonWidth + 12f;
+            if (selectedTabIndex == BlocksTabIndex)
+            {
+                headerButtonsWidth += CompatibilityButtonWidth + CompatibilityButtonGap;
+                if (compatibilityInfoButton.Parent == null) contentPanel.Append(compatibilityInfoButton);
+            }
+            else if (compatibilityInfoButton.Parent != null) compatibilityInfoButton.Remove();
 
             contentDescription.Left.Set(descriptionLeft, 0f);
             contentDescription.Width.Set(

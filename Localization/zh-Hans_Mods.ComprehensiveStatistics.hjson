@@ -11,6 +11,44 @@ UI: {
 	StatisticsStartedAt: 统计开始时间：{0:g}
 	StatisticsStartUnavailable: 尚未进入世界，无可用的统计开始时间。
 
+	Compatibility: {
+		Title: 更好的体验：工具统计
+		Version: 已加载版本：{0}
+		ToolLine: "{0}：{1}"
+		ReplacementRule: 成功替换分别增加旧内容拆除与新内容放置。
+		HistoryRule: 保留已有记录；此前漏计的数量不补算。
+		MultiplayerRule: 多人需双方更新；只统计服务器确认的施工。
+		Limits: 多人每步骤最多确认 8192 格，超限步骤不计。
+		FurnitureLimit: 多人新家具最多完整同步 32×32 格，超限步骤不计。
+
+		States: {
+			NotInstalled: 更好的体验未加载；原有统计和历史记录不受影响。
+			UnsupportedVersion: 需要更好的体验 1.8.2 或更高版本，工具统计未启用。
+			SinglePlayer: 单人：已启用 {0}/8 项工具统计。
+			WaitingForServer: 多人：正在确认服务器支持情况……
+			ServerUnavailable: 多人：服务器尚未确认支持，工具计数未启用。
+			NoCompatibleTools: 当前没有可用的工具统计能力。
+			MultiplayerReady: 多人：已启用 {0}/8 项工具统计。
+		}
+
+		Availability: {
+			Disabled: 未启用
+			Waiting: 等待服务器
+			Enabled: 已启用
+		}
+
+		Tools: {
+			Construct: 构造魔杖
+			Building: 建造魔杖
+			Space: 空间魔杖
+			BurstSelector: 法爆／星爆：框选
+			FixedBurst: 法爆／星爆：固定范围
+			WallSelector: 科技魔杖：框选墙
+			Robot: 科技魔杖：墙机器人
+			Vein: 内置连锁挖矿
+		}
+	}
+
 	Blocks: {
 		SolidTilesGroup: 物块
 		BackgroundWallsGroup: 背景墙

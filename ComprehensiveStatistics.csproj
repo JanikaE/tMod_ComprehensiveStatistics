@@ -10,7 +10,8 @@
 
 	<!-- References -->
 	<ItemGroup>
-		
+		<!-- 独立回归程序通过自己的项目编译，不进入模组程序集。 -->
+		<Compile Remove="Tests/**/*.cs" />
 	</ItemGroup>
 
 </Project>

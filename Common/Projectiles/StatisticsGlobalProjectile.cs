@@ -6,12 +6,13 @@ using Terraria.ModLoader;
 namespace ComprehensiveStatistics.Common.Projectiles
 {
     /// <summary>
-    /// 观察浮标的生成与销毁，将真实抛竿及其最终结果交给玩家统计会话结算。
+    /// 观察浮标的生成与销毁以结算钓鱼会话，并在兼容墙机器人生成时绑定施工归属。
     /// </summary>
     internal sealed class StatisticsGlobalProjectile : GlobalProjectile
     {
         public override void OnSpawn(Projectile projectile, IEntitySource source)
         {
+            Systems.ImproveGameToolSystem.ObserveRobotSpawn(projectile);
             if (projectile == null
                 || !projectile.bobber
                 || source is not IEntitySource_WithStatsFromItem itemSource)

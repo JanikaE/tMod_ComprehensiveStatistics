@@ -180,7 +180,7 @@ namespace ComprehensiveStatistics.Common.Statistics
             try
             {
                 int formatVersion = reader.ReadInt32();
-                if (formatVersion != StatisticsDataFormat.CurrentVersion)
+                if (!StatisticsDataFormat.CanLoad(formatVersion))
                 {
                     error = $"Unsupported statistics network format version: {formatVersion}.";
                     return false;
@@ -195,7 +195,7 @@ namespace ComprehensiveStatistics.Common.Statistics
                     return false;
                 }
 
-                StatisticsData loadedData = new StatisticsData(formatVersion, startedAtUtc);
+                StatisticsData loadedData = new StatisticsData(StatisticsDataFormat.CurrentVersion, startedAtUtc);
                 for (int index = 0; index < entryCount; index++)
                 {
                     string statisticId = reader.ReadString();
@@ -258,7 +258,7 @@ namespace ComprehensiveStatistics.Common.Statistics
             {
                 TagCompound root = playerTag.GetCompound(PlayerTagKey);
                 int formatVersion = root.GetInt(FormatVersionKey);
-                if (formatVersion != StatisticsDataFormat.CurrentVersion)
+                if (!StatisticsDataFormat.CanLoad(formatVersion))
                 {
                     error = $"Unsupported statistics data format version: {formatVersion}.";
                     return false;
@@ -492,7 +492,7 @@ namespace ComprehensiveStatistics.Common.Statistics
             try
             {
                 int formatVersion = tag.GetInt(FormatVersionKey);
-                if (formatVersion != StatisticsDataFormat.CurrentVersion
+                if (!StatisticsDataFormat.CanLoad(formatVersion)
                     || !tag.ContainsKey(StartedAtKey))
                 {
                     return false;
@@ -500,7 +500,7 @@ namespace ComprehensiveStatistics.Common.Statistics
 
                 DateTimeOffset startedAtUtc =
                     DateTimeOffset.FromUnixTimeMilliseconds(tag.GetLong(StartedAtKey));
-                StatisticsData loadedData = new StatisticsData(formatVersion, startedAtUtc);
+                StatisticsData loadedData = new StatisticsData(StatisticsDataFormat.CurrentVersion, startedAtUtc);
                 IList<TagCompound> entryTags = Array.Empty<TagCompound>();
                 if (tag.ContainsKey(EntriesKey))
                 {

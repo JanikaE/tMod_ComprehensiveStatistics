@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using ComprehensiveStatistics.Common.Systems;
 using ComprehensiveStatistics.Common.Statistics;
+using ComprehensiveStatistics.Common.Networking;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.DataStructures;
@@ -168,7 +169,10 @@ namespace ComprehensiveStatistics.Common.Players
             pendingPickupObservations.Clear();
             trackedTalkingNpcIndex = -1;
             ResetFishingTracking();
+            ImproveGameMultiplayerSystem.EnterWorld();
         }
+
+        public override void PlayerDisconnect() => ImproveGameMultiplayerSystem.Disconnect(Player.whoAmI);
 
         public override void SaveData(TagCompound tag)
         {
@@ -1979,6 +1983,30 @@ namespace ComprehensiveStatistics.Common.Players
             Record(
                 StatisticKeys.GetPlacedTileKey(tileContent),
                 new StatisticMetrics(events: 1L));
+        }
+
+        /// <summary>只在所属客户端应用已经去重的服务器施工结果，同时进入生涯与当前世界切片。</summary>
+        internal void RecordConfirmedConstruction(ImproveGameCredit credit)
+        {
+            if (!IsOwnedByLocalClient || !ImproveGameProtocol.IsValid(credit)) return;
+            if (credit.Kind >= TileChangeKind.WiringPlaced)
+            {
+                if (ImproveGameProtocol.TryGetWiringComponent(credit.Content, out WiringComponentKind component))
+                    RecordWiringComponentChanges(component, credit.Kind == TileChangeKind.WiringPlaced, credit.Count);
+                return;
+            }
+            string style = credit.Style.ToString(CultureInfo.InvariantCulture);
+            StatisticKey key = credit.Kind switch
+            {
+                TileChangeKind.TilePlaced => StatisticKeys.GetPlacedTileKey(credit.Content),
+                TileChangeKind.TileRemoved => StatisticKeys.GetMinedTileKey(credit.Content),
+                TileChangeKind.ObjectPlaced => StatisticKeys.GetPlacedTileObjectKey(credit.Content, style),
+                TileChangeKind.ObjectRemoved => StatisticKeys.GetRemovedTileObjectKey(credit.Content, style),
+                TileChangeKind.WallPlaced => StatisticKeys.GetPlacedWallKey(credit.Content),
+                TileChangeKind.WallRemoved => StatisticKeys.GetRemovedWallKey(credit.Content),
+                _ => throw new System.ArgumentOutOfRangeException(nameof(credit))
+            };
+            Record(key, new StatisticMetrics(events: credit.Count));
         }
 
         /// <summary>

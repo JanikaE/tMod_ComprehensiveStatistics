@@ -30,7 +30,14 @@ namespace ComprehensiveStatistics.Common.Networking
         WiringChangeVerificationResult = 4,
         WorldNpcDeathBatch = 5,
         WorldStatisticsSnapshotRequest = 6,
-        WorldStatisticsSnapshot = 7
+        WorldStatisticsSnapshot = 7,
+        ImproveGameHello = 8,
+        ImproveGameWelcome = 9,
+        ImproveGameReady = 10,
+        ImproveGameCreditBatch = 11,
+        ImproveGameClientBegin = 12,
+        ImproveGameClientTargets = 13,
+        ImproveGameClientCommit = 14
     }
 
     /// <summary>
@@ -186,6 +193,11 @@ namespace ComprehensiveStatistics.Common.Networking
             }
 
             StatisticsPacketType packetType = (StatisticsPacketType)reader.ReadByte();
+            if (packetType >= StatisticsPacketType.ImproveGameHello && packetType <= StatisticsPacketType.ImproveGameClientCommit)
+            {
+                ImproveGameMultiplayerSystem.HandlePacket(packetType, reader, whoAmI);
+                return;
+            }
             if (Main.netMode == NetmodeID.Server)
             {
                 HandleServerPacket(packetType, reader, whoAmI);

@@ -31,6 +31,16 @@
 [*]支持简体中文与英文
 [/list]
 
+[h2]“更好的体验”施工工具兼容[/h2]
+
+[list]
+[*]支持 ImproveGame 1.8.2 及更高版本，覆盖构造、建造、空间、法爆／星爆、科技墙工具及内置连锁挖矿；在物块页悬停 ? 查看当前会话中实际启用的工具。
+[*]成功替换会分别增加旧内容拆除和新内容放置；家具按完整对象计数。
+[*]多人需客户端和服务器均更新，只有服务器确认的施工才增加统计；未启用或未确认的部分不推算。
+[*]多人游戏中，单个施工步骤最多确认 8192 格，新家具需能在 32×32 格内完整同步；超限步骤可能不计入。
+[*]旧数据、开始时间及折叠状态会保留，历史漏计不自动补算。
+[/list]
+
 [h2]注意事项[/h2]
 
 [list]
@@ -39,47 +49,4 @@
 [*]当前世界公共统计仅包含受支持的世界级记录，例如 NPC 实际死亡次数；本模组不是服务器排行榜。
 [*]本模组支持原版内容，以及遵循 Terraria/tModLoader 标准机制的模组内容。高度自定义的模组机制可能显示为“未知/未分类”；无法可靠测量时也可能不记录。
 [*]当前版本暂不提供统计重置、导出、导入、合并或跨角色共享功能。
-[/list]
-
-[h1]Comprehensive Statistics[/h1]
-
-Ever wondered how many blocks you have placed, how far you have travelled, or what has taken the most life from you?
-
-Comprehensive Statistics adds one in-game window for exploring detailed records from your character career, your activity in the current world, and selected current-world events. Open it from the inventory button or assign a configurable hotkey.
-
-[h2]What can it track?[/h2]
-
-[list]
-[*][b]Blocks:[/b] blocks, walls, furniture, multi-tile objects, wires, and actuators placed or removed
-[*][b]Items:[/b] items picked up, used, and discarded
-[*][b]Ammunition:[/b] expected and actual consumption by ammo type, including conservation rate
-[*][b]Interactions:[/b] NPC conversations, dialogue buttons, furniture, buff stations, containers, pylons, clocks, and mechanisms
-[*][b]Kills:[/b] your final kills and assists, alongside each NPC type's actual deaths in the current world
-[*][b]Economy:[/b] purchases, sales, nurse healing, reforging, coin income, spending, net flow, and special currencies
-[*][b]Fishing:[/b] casts, catches, empty or interrupted casts, caught items and NPCs, and liquid type
-[*][b]Bait:[/b] bait selected and consumed, with conservation rate
-[*][b]Movement:[/b] distance travelled on foot, by jump, flight, grapple, rope, mount, minecart, and other methods
-[*][b]Survival:[/b] deaths and actual life lost, broken down by direct damage, damage-over-time effects, and other sources
-[/list]
-
-[h2]Made for large, long-running records[/h2]
-
-[list]
-[*]Switch between character-career and character-in-current-world statistics
-[*]Search records and filter vanilla or modded content
-[*]Sort any table column and expand or collapse grouped details
-[*]Keep separate group expansion states for each character, world, and statistics page
-[*]Use the same character statistics in single-player, host-and-play, and dedicated-server sessions
-[*]View missing mod content by its saved content key; reinstalling that mod restores its name and icon
-[*]Play in English or Simplified Chinese
-[/list]
-
-[h2]Please note[/h2]
-
-[list]
-[*]Recording starts only after this mod is installed and enabled. Activity from earlier play sessions cannot be reconstructed.
-[*]Character statistics are personal and saved with that character. In multiplayer, you can view your own character data, not the complete personal records of other players.
-[*]Current-world public statistics are limited to supported world-wide records, such as NPC deaths; they are not a server leaderboard.
-[*]Vanilla content and mod content using standard Terraria/tModLoader behavior are supported. Highly custom mod mechanics may appear as unknown or unclassified, or may be omitted when they cannot be measured reliably.
-[*]The current version does not provide statistics reset, export, import, merging, or cross-character sharing.
 [/list]

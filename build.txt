@@ -1,3 +1,4 @@
-displayName = Comprehensive Statistics 综合统计
+displayName = 综合统计
 author = Janika
-version = 1.0.0
+version = 1.1.0
+buildIgnore = Tests/*

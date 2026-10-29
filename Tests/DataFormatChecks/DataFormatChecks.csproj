@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(TmlPath)/tModLoader.dll" Private="false" />
+    <Reference Include="$(TmlPath)/Libraries/**/*.dll" Private="false" />
+    <Reference Remove="$(TmlPath)/Libraries/Native/**" />
+    <Reference Remove="$(TmlPath)/Libraries/**/runtime*/**" />
+    <Reference Remove="$(TmlPath)/Libraries/**/*.resources.dll" />
+  </ItemGroup>
+  <Target Name="RequireTmlPath" BeforeTargets="ResolveReferences" Condition="'$(TmlPath)' == ''">
+    <Error Text="Pass -p:TmlPath=the tModLoader install directory." />
+  </Target>
+</Project>

@@ -8,7 +8,10 @@ namespace ComprehensiveStatistics.Common.Statistics
     /// </summary>
     internal static class StatisticsDataFormat
     {
-        internal const int CurrentVersion = 1;
+        internal const int CurrentVersion = 3;
+
+        /// <summary>版本 3 扩展替换拆除口径，沿用版本 1/2 字段并保留已有累计，不倒推历史拆除。</summary>
+        internal static bool CanLoad(int version) => version >= 1 && version <= CurrentVersion;
     }
 
     /// <summary>

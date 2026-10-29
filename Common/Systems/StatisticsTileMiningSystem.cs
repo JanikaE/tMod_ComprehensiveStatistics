@@ -1,15 +1,11 @@
-using ComprehensiveStatistics.Common.Players;
 using ComprehensiveStatistics.Common.Statistics;
-using Terraria.DataStructures;
 using Terraria;
-using Terraria.ID;
 using Terraria.ModLoader;
-using Terraria.ObjectData;
 
 namespace ComprehensiveStatistics.Common.Systems
 {
     /// <summary>
-    /// 在玩家采掘入口处关联破坏者与目标内容，并只提交真正消失的实体物块、物体或背景墙。
+    /// 仅为有效本地采掘建立目标观察，复用放置和兼容层的值快照、对象归一化及去重。
     /// </summary>
     internal sealed class StatisticsTileMiningSystem : ModSystem
     {
@@ -26,236 +22,58 @@ namespace ComprehensiveStatistics.Common.Systems
         }
 
         /// <summary>
-        /// 对一次玩家采掘调用保存目标快照，并在原版逻辑结束后确认目标确实被破坏。
+        /// 观察一次直接采掘；失败、尚未达到破坏阈值及残留多格对象均不入账。
         /// </summary>
-        private static void HandlePickTile(
-            On_Player.orig_PickTile orig,
-            Player player,
-            int x,
-            int y,
-            int pickPower)
+        private static void HandlePickTile(On_Player.orig_PickTile orig, Player player,
+            int x, int y, int pickPower)
         {
-            bool shouldObserve = IsOwnedLocalMiningAttempt(
-                player,
-                x,
-                y,
-                pickPower,
-                wallMining: false);
-            ushort originalTileType = 0;
-            TileObjectSnapshot tileObject = default;
-            bool isTileObject = false;
-            if (shouldObserve)
+            if (!IsOwnedLocalMiningAttempt(player, x, y, pickPower, false))
             {
-                Tile originalTile = Framing.GetTileSafely(x, y);
-                shouldObserve = originalTile.HasTile;
-                TileObjectData objectData = shouldObserve
-                    ? TileObjectData.GetTileData(originalTile)
-                    : null;
-                if (objectData != null)
-                {
-                    shouldObserve = TileObjectSnapshot.TryCreate(
-                        x,
-                        y,
-                        originalTile,
-                        objectData,
-                        out tileObject);
-                    isTileObject = shouldObserve;
-                }
-                else if (shouldObserve)
-                {
-                    originalTileType = originalTile.TileType;
-                }
-            }
-
-            orig(player, x, y, pickPower);
-
-            if (!shouldObserve)
-            {
+                orig(player, x, y, pickPower);
                 return;
             }
-
-            if (isTileObject)
+            using (TileChangeScope.Begin(player))
             {
-                if (tileObject.IsFullyRemoved())
-                {
-                    player.GetModPlayer<StatisticsPlayer>().RecordRemovedTileObject(
-                        tileObject.TileType,
-                        tileObject.Style);
-                }
-
-                return;
+                TileChangeScope.Observe(x, y, TileChangeLayer.Tile, TileChangeIntent.Remove);
+                orig(player, x, y, pickPower);
             }
-
-            Tile resultingTile = Framing.GetTileSafely(x, y);
-            if (resultingTile.HasTile && resultingTile.TileType == originalTileType)
-            {
-                // 仍是原物块说明本次只积累了采掘伤害，或被权限/强度检查阻止。
-                return;
-            }
-
-            player.GetModPlayer<StatisticsPlayer>().RecordMinedTile(originalTileType);
         }
 
         /// <summary>
-        /// 对一次锤墙调用保存目标快照，并在原版逻辑结束后确认背景墙确实被拆除。
+        /// 背景墙采掘与物块使用不同内容层，避免同坐标的两种变化互相覆盖。
         /// </summary>
-        private static void HandlePickWall(
-            On_Player.orig_PickWall orig,
-            Player player,
-            int x,
-            int y,
-            int hammerPower)
+        private static void HandlePickWall(On_Player.orig_PickWall orig, Player player,
+            int x, int y, int hammerPower)
         {
-            bool shouldObserve = IsOwnedLocalMiningAttempt(
-                player,
-                x,
-                y,
-                hammerPower,
-                wallMining: true);
-            ushort originalWallType = WallID.None;
-            if (shouldObserve)
+            if (!IsOwnedLocalMiningAttempt(player, x, y, hammerPower, true))
             {
-                originalWallType = Framing.GetTileSafely(x, y).WallType;
-                shouldObserve = originalWallType != WallID.None;
-            }
-
-            orig(player, x, y, hammerPower);
-
-            if (!shouldObserve
-                || Framing.GetTileSafely(x, y).WallType == originalWallType)
-            {
-                // 未达到破坏阈值、受保护或其他失败情形都会保留原背景墙。
+                orig(player, x, y, hammerPower);
                 return;
             }
-
-            player.GetModPlayer<StatisticsPlayer>().RecordRemovedWall(originalWallType);
+            using (TileChangeScope.Begin(player))
+            {
+                TileChangeScope.Observe(x, y, TileChangeLayer.Wall, TileChangeIntent.Remove);
+                orig(player, x, y, hammerPower);
+            }
         }
 
         /// <summary>
-        /// 判断调用是否来自当前客户端正在进行的有效工具使用。
-        /// 爆炸、液体、物块更新、掉落物块和世界事件直接走 WorldGen 路径，不会通过本入口。
+        /// 保留原有工具活动检查；M1 不因重构而给未适配协程、爆炸或普通世界逻辑开放归属。
         /// </summary>
-        private static bool IsOwnedLocalMiningAttempt(
-            Player player,
-            int x,
-            int y,
-            int toolPower,
-            bool wallMining)
+        private static bool IsOwnedLocalMiningAttempt(Player player, int x, int y,
+            int toolPower, bool wallMining)
         {
-            if (Main.dedServ
-                || Main.gameMenu
-                || player?.active != true
-                || player.whoAmI != Main.myPlayer
-                || toolPower <= 0
-                || !WorldGen.InWorld(x, y)
-                || (player.itemAnimation <= 0
-                    && player.itemTime <= 0
-                    && !player.channel))
-            {
+            if (Main.dedServ || Main.gameMenu || player?.active != true
+                || player.whoAmI != Main.myPlayer || toolPower <= 0 || !WorldGen.InWorld(x, y)
+                || (player.itemAnimation <= 0 && player.itemTime <= 0 && !player.channel))
                 return false;
-            }
 
             Item heldItem = player.HeldItem;
             if (heldItem == null || heldItem.IsAir)
-            {
                 return false;
-            }
-
-            // 原版工具按能力字段确认；模组物品若主动调用玩家采掘入口则视为明确归因。
-            // 直接调用 WorldGen.KillTile/KillWall 的模组行为无法可靠识别破坏者，故意排除。
+            // 模组物品主动调用 Pick 仍可归属；直接修改世界的工具须由之后的适配器显式绑定。
             return heldItem.ModItem != null
-                || (wallMining
-                    ? heldItem.hammer > 0
-                    : heldItem.pick > 0 || heldItem.axe > 0);
-        }
-
-        /// <summary>
-        /// 保存一次物体破坏前的类型、样式和完整占用范围，以便原版逻辑结束后只提交一次统计。
-        /// </summary>
-        private readonly struct TileObjectSnapshot
-        {
-            private TileObjectSnapshot(
-                int tileType,
-                int style,
-                Point16 topLeft,
-                int width,
-                int height)
-            {
-                TileType = tileType;
-                Style = style;
-                TopLeft = topLeft;
-                Width = width;
-                Height = height;
-            }
-
-            internal int TileType { get; }
-
-            internal int Style { get; }
-
-            private Point16 TopLeft { get; }
-
-            private int Width { get; }
-
-            private int Height { get; }
-
-            /// <summary>
-            /// 从物体任意组成格恢复规范化样式和左上原点；普通地形物块没有对象数据。
-            /// </summary>
-            internal static bool TryCreate(
-                int x,
-                int y,
-                Tile tile,
-                TileObjectData data,
-                out TileObjectSnapshot snapshot)
-            {
-                int style = FacilityRegistry.GetCanonicalTileStyle(tile);
-                Point16 topLeft = TileObjectData.TopLeft(x, y);
-                if (style < 0
-                    || topLeft.X < 0
-                    || topLeft.Y < 0
-                    || data.Width <= 0
-                    || data.Height <= 0
-                    || !WorldGen.InWorld(topLeft.X, topLeft.Y)
-                    || !WorldGen.InWorld(
-                        topLeft.X + data.Width - 1,
-                        topLeft.Y + data.Height - 1))
-                {
-                    snapshot = default;
-                    return false;
-                }
-
-                snapshot = new TileObjectSnapshot(
-                    tile.TileType,
-                    style,
-                    topLeft,
-                    data.Width,
-                    data.Height);
-                return true;
-            }
-
-            /// <summary>
-            /// 只有原对象占用范围内不再存在同类型、同样式组成格时，才视为完整拆除。
-            /// </summary>
-            internal bool IsFullyRemoved()
-            {
-                for (int offsetX = 0; offsetX < Width; offsetX++)
-                {
-                    for (int offsetY = 0; offsetY < Height; offsetY++)
-                    {
-                        Tile tile = Framing.GetTileSafely(
-                            TopLeft.X + offsetX,
-                            TopLeft.Y + offsetY);
-                        if (tile.HasTile
-                            && tile.TileType == TileType
-                            && FacilityRegistry.GetCanonicalTileStyle(tile) == Style)
-                        {
-                            return false;
-                        }
-                    }
-                }
-
-                return true;
-            }
+                || (wallMining ? heldItem.hammer > 0 : heldItem.pick > 0 || heldItem.axe > 0);
         }
     }
 }
