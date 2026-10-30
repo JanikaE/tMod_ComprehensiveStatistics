@@ -4,7 +4,7 @@ namespace ComprehensiveStatistics.Common.Statistics
     internal enum TileChangeKind : byte
     {
         TilePlaced = 1, TileRemoved, ObjectPlaced, ObjectRemoved, WallPlaced, WallRemoved,
-        WiringPlaced, WiringRemoved
+        WiringPlaced, WiringRemoved, LiquidPlaced, LiquidRemoved
     }
 
     /// <summary>描述共用结算器确认的一次真实结果；类型编号仅在当前执行端内部使用。</summary>

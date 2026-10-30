@@ -37,7 +37,9 @@ namespace ComprehensiveStatistics.Common.Networking
         ImproveGameCreditBatch = 11,
         ImproveGameClientBegin = 12,
         ImproveGameClientTargets = 13,
-        ImproveGameClientCommit = 14
+        ImproveGameClientCommit = 14,
+        NativeLiquidBegin = 15,
+        NativeLiquidCommit = 16
     }
 
     /// <summary>
@@ -193,7 +195,7 @@ namespace ComprehensiveStatistics.Common.Networking
             }
 
             StatisticsPacketType packetType = (StatisticsPacketType)reader.ReadByte();
-            if (packetType >= StatisticsPacketType.ImproveGameHello && packetType <= StatisticsPacketType.ImproveGameClientCommit)
+            if (packetType >= StatisticsPacketType.ImproveGameHello && packetType <= StatisticsPacketType.NativeLiquidCommit)
             {
                 ImproveGameMultiplayerSystem.HandlePacket(packetType, reader, whoAmI);
                 return;

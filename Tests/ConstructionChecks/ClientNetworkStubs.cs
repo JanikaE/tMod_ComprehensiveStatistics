@@ -5,7 +5,7 @@ using Terraria.ModLoader;
 namespace Terraria
 {
     /// <summary>捕获客户端当前世界的真实值，测试服务器随后独立接受或拒绝该区域。</summary>
-    internal static class NetMessage
+    internal static partial class NetMessage
     {
         /// <summary>模拟 PickTile 在 WorldGen.KillTile 返回后发送的原版采掘包。</summary>
         internal static void SendKill(int x,int y)
@@ -28,6 +28,8 @@ namespace Terraria
         {
             using var reader=new BinaryReader(new MemoryStream(bytes));
             int message=reader.ReadByte();
+            if(message==48){int i=reader.ReadInt16(),j=reader.ReadInt16();Main.Tiles[i,j].LiquidAmount=reader.ReadByte();
+                Main.Tiles[i,j].LiquidType=reader.ReadByte();WorldGen.SquareTileFrame(i,j);return;}
             if(message==17){reader.ReadByte();int i=reader.ReadInt16(),j=reader.ReadInt16();WorldGen.KillTile(i,j);return;}
             if(message!=20)throw new Exception("Unexpected native message.");
             int x=reader.ReadInt16(),y=reader.ReadInt16(),width=reader.ReadByte(),height=reader.ReadByte();reader.ReadByte();

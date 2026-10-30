@@ -6,6 +6,8 @@
   <ItemGroup>
     <Compile Include="*.cs" />
     <Compile Include="../TileChangeChecks/WorldStubs.cs" Link="WorldStubs.cs" />
+    <Compile Include="../LiquidCollectionChecks/NativeILStub.cs" Link="NativeILStub.cs" />
+    <Compile Include="../LiquidCollectionChecks/SendDataStub.cs" Link="SendDataStub.cs" />
     <Compile Include="../../Common/Statistics/TileContentSnapshot.cs" Link="TileContentSnapshot.cs" />
     <Compile Include="../../Common/Statistics/TileChangeScope.cs" Link="TileChangeScope.cs" />
     <Compile Include="../../Common/Statistics/TileChangeResult.cs" Link="TileChangeResult.cs" />
@@ -14,6 +16,11 @@
     <Compile Include="../../Common/Systems/ImproveGameToolSystem.cs" Link="ImproveGameToolSystem.cs" />
     <Compile Include="../../Common/Systems/ImproveGameMultiplayerSystem.cs" Link="ImproveGameMultiplayerSystem.cs" />
     <Compile Include="../../Common/Systems/ImproveGameClientVerification.cs" Link="ImproveGameClientVerification.cs" />
+    <Compile Include="../../Common/Systems/ImproveGameLiquidVerification.cs" Link="ImproveGameLiquidVerification.cs" />
+    <Compile Include="../../Common/Systems/StatisticsLiquidSystem.cs" Link="StatisticsLiquidSystem.cs" />
+    <Compile Include="../../Common/Statistics/LiquidChangeScope.cs" Link="LiquidChangeScope.cs" />
+    <Compile Include="../../Common/Statistics/LiquidChange.cs" Link="LiquidChange.cs" />
+    <Compile Include="../../Common/Statistics/LiquidSnapshot.cs" Link="LiquidSnapshot.cs" />
     <Compile Include="../../Common/Networking/ImproveGameProtocol.cs" Link="ImproveGameProtocol.cs" />
     <Compile Include="../../Common/Networking/ImproveGameCapability.cs" Link="ImproveGameCapability.cs" />
     <Compile Include="../../Common/Networking/ImproveGameVersionPolicy.cs" Link="ImproveGameVersionPolicy.cs" />

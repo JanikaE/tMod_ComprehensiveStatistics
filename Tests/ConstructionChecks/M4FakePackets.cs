@@ -33,9 +33,10 @@ namespace ImproveGame.Content.Packets
         internal SelectorItem Item=new MagickWand();
         internal Rectangle Area=new(4,4,3,1);
         internal IEnumerator Pending;
+        internal Action AfterCreate;
         /// <summary>只创建任务，后续逐帧推进时已无入站上下文。</summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public void Receive()=>Pending=Item.ModifyTiles(Main.player[Sender],Area);
+        public void Receive(){Pending=Item.ModifyTiles(Main.player[Sender],Area);AfterCreate?.Invoke();}
     }
 }
 namespace ImproveGame.Packets.Tiles

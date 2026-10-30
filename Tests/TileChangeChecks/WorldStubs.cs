@@ -23,6 +23,7 @@ namespace Terraria
     {
         internal bool HasTile, RedWire, BlueWire, GreenWire, YellowWire, HasActuator;
         internal int TileType, WallType, Style, OriginX, OriginY, Color = 0, Slope = 0;
+        internal int LiquidType = 0, LiquidAmount = 0;
     }
 
     /// <summary>模拟玩家身份及记录出口。</summary>

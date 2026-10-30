@@ -18,7 +18,7 @@ internal static class PersistenceChecks
     internal static void Run(Assembly assembly)
     {
         serializer=assembly.GetType("ComprehensiveStatistics.Common.Statistics.StatisticsDataSerializer");
-        for(int version=1;version<=3;version++)
+        for(int version=1;version<=4;version++)
         {
             Guid a=Guid.NewGuid(),b=Guid.NewGuid();
             var root=new TagCompound
@@ -54,7 +54,7 @@ internal static class PersistenceChecks
             Check(views.Single(t=>t.GetString("Tab")=="items").GetFloat("ScrollPosition")==170f,"other tab isolated");
             Check(views.Where(t=>t.GetString("Tab")=="negative"||t.GetString("Tab")=="nonfinite").All(t=>t.GetFloat("ScrollPosition")==0f),
                 "invalid scroll defaults to top");
-            Check(saved.GetInt("FormatVersion")==3,"current root format");
+            Check(saved.GetInt("FormatVersion")==4,"current root format");
             Check(!saved.Select(pair=>pair.Key).Except(new[]{"FormatVersion","Career","WorldSlices","ExpansionStates","ListViewStates"}).Any(),"runtime compatibility state is not saved");
             Check(saved.GetCompound("Career").GetLong("StartedAtUnixMilliseconds")==1234567L
                 &&World(saved,a).GetLong("StartedAtUnixMilliseconds")==1234500L&&World(saved,b).GetLong("StartedAtUnixMilliseconds")==1234600L,"original start times");
@@ -81,7 +81,7 @@ internal static class PersistenceChecks
             Check((bool)serializer.GetMethod("TryDeserializeWorld",Flags).Invoke(null,worldInput),"world scope reloads");
             Check(Signature(serializer.GetMethod("SerializeWorld",Flags).Invoke(null,new[]{worldInput[1]}))==Signature(world),"world scope round trip");
         }
-        Console.WriteLine($"PERSISTENCE_CHECKS_OK: {checks} assertions; versions 1/2/3, real compressed TagIO, dual scopes, isolated worlds, missing mod content, object styles, wire Events/Units, timestamps, folds and list views");
+        Console.WriteLine($"PERSISTENCE_CHECKS_OK: {checks} assertions; versions 1/2/3/4, real compressed TagIO, dual scopes, isolated worlds, missing mod content, object styles, wire Events/Units, timestamps, folds and list views");
     }
 
     /// <summary>构造独立列表视图及损坏世界标识，验证生产加载器的容错与隔离。</summary>
@@ -141,7 +141,9 @@ internal static class PersistenceChecks
     /// <summary>保留缺失内容、样式与组件字段，不进行历史补算。</summary>
     private static void Validate(TagCompound scope,long placed)
     {
-        Check(scope.GetInt("FormatVersion")==3,"scope current format");
+        Check(scope.GetInt("FormatVersion")==4,"scope current format");
+        Check(!scope.GetList<TagCompound>("Entries").Any(tag=>tag.GetString("StatisticId").StartsWith("blocks/liquids-",StringComparison.Ordinal)),
+            "legacy totals do not create liquid history");
         Check(EntryOf(scope,"blocks/tiles-placed","Terraria","Dirt").GetLong("Events")==placed
             &&EntryOf(scope,"blocks/tiles-mined","Terraria","Dirt").GetLong("Events")==9,"old totals retained without backfill");
         var missing=EntryOf(scope,"blocks/tile-objects-placed","RemovedProvider","Desk");

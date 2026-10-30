@@ -49,6 +49,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private float lastObservedScrollPosition;
 
         internal event Action ViewStateCommitted;
+        internal string HoveredMetricTooltip => rowPool.Select(row => row.HoveredMetricTooltip).FirstOrDefault(text => text != null);
 
         internal event Action ExpansionStateChanged;
 
@@ -810,6 +811,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 StatisticsMetricDisplay.Mixed => 254f,
                 StatisticsMetricDisplay.WiringActivity => 254f,
+                StatisticsMetricDisplay.LiquidVolume => 254f,
                 StatisticsMetricDisplay.ItemActivity => 370f,
                 StatisticsMetricDisplay.AmmoActivity => 370f,
                 StatisticsMetricDisplay.FishingActivity => 254f,
@@ -845,17 +847,21 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 return;
             }
 
-            if (metricDisplay == StatisticsMetricDisplay.WiringActivity)
+            if (metricDisplay is StatisticsMetricDisplay.WiringActivity or StatisticsMetricDisplay.LiquidVolume)
             {
                 AddColumnHeader(
-                    "Mods.ComprehensiveStatistics.UI.Blocks.WiringPlacedColumn",
+                    metricDisplay == StatisticsMetricDisplay.LiquidVolume
+                        ? "Mods.ComprehensiveStatistics.UI.Blocks.LiquidPlacedColumn"
+                        : "Mods.ComprehensiveStatistics.UI.Blocks.WiringPlacedColumn",
                     StatisticsListSortColumn.Events,
                     leftPixels: -254f,
                     widthPixels: 116f,
                     widthPercent: 0f,
                     leftPercent: 1f);
                 AddColumnHeader(
-                    "Mods.ComprehensiveStatistics.UI.Blocks.WiringRemovedColumn",
+                    metricDisplay == StatisticsMetricDisplay.LiquidVolume
+                        ? "Mods.ComprehensiveStatistics.UI.Blocks.LiquidRemovedColumn"
+                        : "Mods.ComprehensiveStatistics.UI.Blocks.WiringRemovedColumn",
                     StatisticsListSortColumn.Units,
                     leftPixels: -138f,
                     widthPixels: 116f,

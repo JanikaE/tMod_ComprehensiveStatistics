@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Common/Statistics/LiquidSnapshot.cs" Link="LiquidSnapshot.cs" />
+    <Compile Include="../../Common/Statistics/LiquidChange.cs" Link="LiquidChange.cs" />
+    <Compile Include="../../Common/Statistics/LiquidChangeScope.cs" Link="LiquidChangeScope.cs" />
+    <Compile Include="../../Common/Systems/StatisticsLiquidSystem.cs" Link="StatisticsLiquidSystem.cs" />
+    <Compile Include="../../Common/Networking/ImproveGameVersionPolicy.cs" Link="ImproveGameVersionPolicy.cs" />
+    <Reference Include="$(TmlPath)/Libraries/monomod.*/**/net8.0/*.dll" />
+    <Reference Include="$(TmlPath)/Libraries/mono.cecil/**/netstandard2.0/*.dll" />
+  </ItemGroup>
+  <Target Name="RequireTmlPath" BeforeTargets="ResolveReferences" Condition="'$(TmlPath)' == ''">
+    <Error Text="Pass -p:TmlPath=the tModLoader install directory." />
+  </Target>
+</Project>

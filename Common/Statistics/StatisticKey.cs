@@ -88,6 +88,15 @@ namespace ComprehensiveStatistics.Common.Statistics
         Actuator
     }
 
+    /// <summary>标准液体的稳定语义类型；显式值对应原版液体类型，存档只写预留内容键。</summary>
+    internal enum LiquidKind
+    {
+        Water = 0,
+        Lava = 1,
+        Honey = 2,
+        Shimmer = 3
+    }
+
     /// <summary>
     /// 集中定义正式统计键，使采集、存档和 UI 使用同一稳定标识。
     /// </summary>
@@ -101,6 +110,8 @@ namespace ComprehensiveStatistics.Common.Statistics
         internal const string TileObjectPlacedStatisticId = "blocks/tile-objects-placed";
         internal const string TileObjectRemovedStatisticId = "blocks/tile-objects-removed";
         internal const string WiringComponentActivityStatisticId = "blocks/wiring-components";
+        internal const string LiquidPlacedStatisticId = "blocks/liquids-placed";
+        internal const string LiquidRemovedStatisticId = "blocks/liquids-removed";
         internal const string ItemUseStatisticId = "items/uses";
         internal const string AmmoUsageStatisticId = "items/ammo-usage";
         internal const string ItemDiscardStatisticId = "items/discards";
@@ -202,6 +213,31 @@ namespace ComprehensiveStatistics.Common.Statistics
             new StableContentKey("Terraria", "WireYellow"),
             new StableContentKey("Terraria", "Actuator")
         };
+
+        /// <summary>获取标准液体不依赖物品或运行时加载顺序的预留内容键。</summary>
+        internal static StableContentKey GetLiquidContent(LiquidKind liquid)
+        {
+            return liquid switch
+            {
+                LiquidKind.Water => new StableContentKey("Terraria", "LiquidWater"),
+                LiquidKind.Lava => new StableContentKey("Terraria", "LiquidLava"),
+                LiquidKind.Honey => new StableContentKey("Terraria", "LiquidHoney"),
+                LiquidKind.Shimmer => new StableContentKey("Terraria", "LiquidShimmer"),
+                _ => throw new ArgumentOutOfRangeException(nameof(liquid))
+            };
+        }
+
+        /// <summary>取得指定液体的放置体积键，原始体积写入 Units，不作为事件数。</summary>
+        internal static StatisticKey GetPlacedLiquidKey(LiquidKind liquid)
+        {
+            return new StatisticKey(LiquidPlacedStatisticId, GetLiquidContent(liquid));
+        }
+
+        /// <summary>取得指定液体的移除体积键，包含有明确操作证据的吸收与直接清除。</summary>
+        internal static StatisticKey GetRemovedLiquidKey(LiquidKind liquid)
+        {
+            return new StatisticKey(LiquidRemovedStatisticId, GetLiquidContent(liquid));
+        }
 
         /// <summary>
         /// 获取指定实体物块对应的成功放置统计键。

@@ -13,7 +13,7 @@ using Terraria.Localization;
 /// <summary>使用生产状态与提示生成器验证真实中英文资源，不启动游戏或访问角色。</summary>
 internal static class Program
 {
-    private const ImproveGameCapability All = (ImproveGameCapability)255;
+    private const ImproveGameCapability All = (ImproveGameCapability)511;
     private static int checks;
 
     /// <summary>验证状态、实际能力、语言键、占位符与所有提示分支。</summary>
@@ -34,15 +34,15 @@ internal static class Program
         {
             (Status(null, true, false, All, All, true, false, All), ImproveGameCompatibilityState.NotInstalled, 0),
             (Status("1.8.1", false, false, All, All, true, false, All), ImproveGameCompatibilityState.UnsupportedVersion, 0),
-            (Status("99.0", ImproveGameVersionPolicy.Supports(new Version(99, 0)), true, All, All, true, false, All), ImproveGameCompatibilityState.MultiplayerReady, 8),
+            (Status("99.0", ImproveGameVersionPolicy.Supports(new Version(99, 0)), true, All, All, true, false, All), ImproveGameCompatibilityState.MultiplayerReady, 9),
             (Status("1.8.4", ImproveGameVersionPolicy.Supports(new Version(1, 8, 4)), false, 0, 0, false, false, 0), ImproveGameCompatibilityState.NoCompatibleTools, 0),
-            (Status("1.8.2", true, false, All, 0, false, false, 0), ImproveGameCompatibilityState.SinglePlayer, 8),
+            (Status("1.8.2", true, false, All, 0, false, false, 0), ImproveGameCompatibilityState.SinglePlayer, 9),
             (Status("1.8.2", true, false, ImproveGameCapability.Building, All, true, false, All), ImproveGameCompatibilityState.SinglePlayer, 1),
             (Status("1.8.2", true, true, All, All, false, false, All), ImproveGameCompatibilityState.WaitingForServer, 0),
             (Status("1.8.2", true, true, All, All, false, true, All), ImproveGameCompatibilityState.ServerUnavailable, 0),
             (Status("1.8.2", true, true, All, 0, false, false, All), ImproveGameCompatibilityState.NoCompatibleTools, 0),
             (Status("1.8.2", true, true, All, All, true, false, 0), ImproveGameCompatibilityState.NoCompatibleTools, 0),
-            (Status("1.8.2", true, true, All, All, true, false, All), ImproveGameCompatibilityState.MultiplayerReady, 8),
+            (Status("1.8.2", true, true, All, All, true, false, All), ImproveGameCompatibilityState.MultiplayerReady, 9),
             (Status("1.8.3", true, true, All, All, true, false, ImproveGameCapability.Space), ImproveGameCompatibilityState.MultiplayerReady, 1),
             (Status("1.8.2", true, true, All, ImproveGameCapability.Building, true, false, All), ImproveGameCompatibilityState.MultiplayerReady, 1)
         };
@@ -60,7 +60,7 @@ internal static class Program
                 if (state == ImproveGameCompatibilityState.WaitingForServer)
                     Check(text.Contains(language["UI.Compatibility.Availability.Waiting"]), "waiting is visible");
                 if (count == 1)
-                    Check(text.Contains("1/8") && text.Contains(language["UI.Compatibility.Availability.Disabled"]), "partial capability shown honestly");
+                    Check(text.Contains("1/9") && text.Contains(language["UI.Compatibility.Availability.Disabled"]), "partial capability shown honestly");
             }
         }
         var pending = Status("1.8.2", true, true, All, ImproveGameCapability.Building, false, false, 0);

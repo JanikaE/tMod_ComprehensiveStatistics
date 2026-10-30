@@ -21,6 +21,7 @@ namespace ComprehensiveStatistics.Common.Systems
         private readonly List<Hook> hooks = new();
         private static ImproveGameCapability collectionCapabilities, receiverCapabilities;
         private static ImproveGameCapability clientCapabilities;
+        private static ImproveGameCapability liquidCapabilities;
         private static readonly Dictionary<int, ServerSession> sessions = new();
         private static readonly ImproveGameCreditCursor cursor = new();
         [ThreadStatic] private static int? inboundPlayer;
@@ -28,7 +29,9 @@ namespace ComprehensiveStatistics.Common.Systems
         private static ulong lastHello;
         private static int helloAttempts;
         private static bool warnedMissingServer;
-        internal static ImproveGameCapability Capabilities => (collectionCapabilities & receiverCapabilities) | clientCapabilities;
+        internal static ImproveGameCapability Capabilities => (collectionCapabilities & receiverCapabilities) | clientCapabilities
+            | (liquidCapabilities & ImproveGameCapability.NativeLiquid)
+            | (liquidCapabilities & receiverCapabilities & ImproveGameCapability.Liquid);
 
         /// <summary>只在玩家打开的界面中查询真实安装/协商状态，不读取或创建任何 ModPlayer 数据。</summary>
         internal static ImproveGameCompatibilityStatus GetDisplayStatus()
@@ -36,7 +39,8 @@ namespace ComprehensiveStatistics.Common.Systems
             bool installed = ModLoader.TryGetMod("ImproveGame", out Mod mod);
             return ImproveGameCompatibilityStatus.Create(installed ? mod.Version.ToString() : null,
                 installed && ImproveGameVersionPolicy.Supports(mod.Version),
-                Main.netMode == NetmodeID.MultiplayerClient, collectionCapabilities | clientCapabilities, Capabilities,
+                Main.netMode == NetmodeID.MultiplayerClient, collectionCapabilities | clientCapabilities
+                    | (liquidCapabilities & ImproveGameCapability.Liquid), Capabilities & ~ImproveGameCapability.NativeLiquid,
                 cursor.Server != Guid.Empty, helloAttempts >= 10, cursor.Capabilities);
         }
 
@@ -56,7 +60,7 @@ namespace ComprehensiveStatistics.Common.Systems
             Assembly code = mod.Code;
             InstallReceiver(code, "ImproveGame.Content.Packets.SpaceWandOperation", ImproveGameCapability.Space);
             InstallReceiver(code, "ImproveGame.Content.Packets.SelectorItemOperation",
-                ImproveGameCapability.BurstSelector | ImproveGameCapability.WallSelector);
+                ImproveGameCapability.BurstSelector | ImproveGameCapability.WallSelector | ImproveGameCapability.Liquid);
             InstallReceiver(code, "ImproveGame.Packets.Tiles.VeinMiningPacket", ImproveGameCapability.Vein);
             Mod.Logger.Info($"ImproveGame M4 receiver hooks installed: {receiverCapabilities}. "
                 + "Recording requires matching protocol and mutually negotiated capabilities.");
@@ -74,7 +78,7 @@ namespace ComprehensiveStatistics.Common.Systems
             On_WorldGen.PlaceWall -= FlushBeforeWall;
             for (int i = hooks.Count - 1; i >= 0; i--) hooks[i].Dispose();
             hooks.Clear(); collectionCapabilities = receiverCapabilities = 0;
-            clientCapabilities = 0;
+            clientCapabilities = liquidCapabilities = 0;
             ResetWorld();
         }
 
@@ -88,6 +92,8 @@ namespace ComprehensiveStatistics.Common.Systems
                     if (!IsPlayer(pair.Value.Player)) expired.Add(pair.Key);
                     else if (pair.Value.Window != null && Main.GameUpdateCount - pair.Value.Window.Created > 1800)
                     { pair.Value.Window.Reject(); pair.Value.Window = null; }
+                    if (pair.Value.NativeWindow != null && Main.GameUpdateCount - pair.Value.NativeWindow.Created > 1800)
+                        pair.Value.NativeWindow = null;
                 }
                 foreach (int index in expired) sessions.Remove(index);
                 return;
@@ -99,7 +105,7 @@ namespace ComprehensiveStatistics.Common.Systems
             if (helloAttempts != 0 && Main.GameUpdateCount - lastHello < 180) return;
             lastHello = Main.GameUpdateCount; helloAttempts++;
             Send(StatisticsPacketType.ImproveGameHello, packet =>
-            { packet.Write(ImproveGameProtocol.Version); packet.Write(cursor.Client.ToByteArray()); packet.Write((byte)Capabilities); });
+            { packet.Write(ImproveGameProtocol.Version); packet.Write(cursor.Client.ToByteArray()); packet.Write((ushort)Capabilities); });
             if (helloAttempts == 10 && !warnedMissingServer)
             {
                 warnedMissingServer = true;
@@ -150,6 +156,7 @@ namespace ComprehensiveStatistics.Common.Systems
         /// <summary>本地角色进入世界时生成新挑战；返回菜单或换世界后旧包一律失效。</summary>
         internal static void EnterWorld()
         {
+            ResetLiquidNetwork();
             cursor.Reset(Main.netMode == NetmodeID.MultiplayerClient ? Guid.NewGuid() : Guid.Empty);
             nextClientOperation = 0;
             lastHello = 0; helloAttempts = 0; warnedMissingServer = false;
@@ -160,7 +167,7 @@ namespace ComprehensiveStatistics.Common.Systems
 
         /// <summary>清除会话、队列和当前入口；任务弱关联中的旧 Authority 将因此失效。</summary>
         private static void ResetWorld()
-        { sessions.Clear(); cursor.Reset(Guid.Empty); inboundPlayer = null; active = null; helloAttempts = 0; currentClientStep = null; currentObservation = null; nextClientOperation = 0; }
+        { sessions.Clear(); cursor.Reset(Guid.Empty); inboundPlayer = null; active = null; helloAttempts = 0; currentClientStep = null; currentObservation = null; nextClientOperation = 0; ResetLiquidNetwork(); }
 
         /// <summary>严格匹配实际网络接收入口及 Sender 属性，能力失败时只关闭相应组。</summary>
         private void InstallReceiver(Assembly code, string name, ImproveGameCapability capability)
@@ -195,9 +202,12 @@ namespace ComprehensiveStatistics.Common.Systems
             ServerObservation observation = BeginObservation(self, start, length);
             ServerObservation previousObservation = currentObservation;
             currentObservation = observation;
-            try { orig(self, start, length, out type); observation?.Complete(); }
-            catch { observation?.Invalidate(); throw; }
-            finally { currentObservation = previousObservation; inboundPlayer = previous; }
+            NativeInbound native = BeginNativeInbound(self, start, length);
+            NativeInbound previousNative = currentNativeInbound;
+            currentNativeInbound = native;
+            try { orig(self, start, length, out type); observation?.Complete(); native?.Complete(); }
+            catch { observation?.Invalidate(); native?.Invalidate(); throw; }
+            finally { currentObservation = previousObservation; currentNativeInbound = previousNative; inboundPlayer = previous; }
         }
 
         /// <summary>真实发送者与第三方 Sender 一致且握手完成后，才创建服务器分配的任务身份。</summary>
@@ -224,17 +234,21 @@ namespace ComprehensiveStatistics.Common.Systems
             {
                 // tModLoader 共用 MessageBuffer 流的 Length 不是当前模组包边界，先提取有界正文。
                 int length = reader.ReadUInt16();
-                if (length < 1 || length > ImproveGameProtocol.MaxBodyBytes) return;
+                if (length < 1 || length > ImproveGameProtocol.MaxBodyBytes) { RejectNativeFrame(type, whoAmI); return; }
                 byte[] body = reader.ReadBytes(length);
-                if (body.Length != length) return;
+                if (body.Length != length) { RejectNativeFrame(type, whoAmI); return; }
                 using var stream = new MemoryStream(body, writable: false);
                 using var bounded = new BinaryReader(stream);
                 HandleBody(type, bounded, whoAmI);
             }
             catch (Exception error) when (error is IOException || error is InvalidDataException || error is ArgumentException || error is FormatException)
             {
-                if (Main.netMode == NetmodeID.Server && type >= StatisticsPacketType.ImproveGameClientBegin
-                    && sessions.TryGetValue(whoAmI, out ServerSession session)) session.Window?.Reject();
+                if (Main.netMode == NetmodeID.Server && sessions.TryGetValue(whoAmI, out ServerSession session))
+                {
+                    if (type >= StatisticsPacketType.ImproveGameClientBegin && type <= StatisticsPacketType.ImproveGameClientCommit)
+                        session.Window?.Reject();
+                    RejectNativeFrame(type, whoAmI);
+                }
             }
         }
 
@@ -247,7 +261,7 @@ namespace ComprehensiveStatistics.Common.Systems
                 {
                     if (reader.ReadUInt16() != ImproveGameProtocol.Version) return;
                     Guid client = ImproveGameProtocol.ReadIdentity(reader);
-                    var offered = (ImproveGameCapability)reader.ReadByte();
+                    var offered = (ImproveGameCapability)reader.ReadUInt16();
                     if ((offered & ~ImproveGameProtocol.All) != 0 || reader.BaseStream.Position != reader.BaseStream.Length) return;
                     if (!sessions.TryGetValue(whoAmI, out ServerSession session) || session.Client != client
                         || session.Player != Main.player[whoAmI])
@@ -257,7 +271,7 @@ namespace ComprehensiveStatistics.Common.Systems
                     }
                     Send(StatisticsPacketType.ImproveGameWelcome, response =>
                     { ImproveGameProtocol.WriteSession(response, session.Client, session.Server);
-                        response.Write((byte)session.Capabilities); }, whoAmI);
+                        response.Write((ushort)session.Capabilities); }, whoAmI);
                 }
                 else if (type == StatisticsPacketType.ImproveGameReady && sessions.TryGetValue(whoAmI, out ServerSession ready)
                     && ImproveGameProtocol.ReadSession(reader, ready.Client, ready.Server)
@@ -265,6 +279,9 @@ namespace ComprehensiveStatistics.Common.Systems
                 else if (type >= StatisticsPacketType.ImproveGameClientBegin && type <= StatisticsPacketType.ImproveGameClientCommit
                     && sessions.TryGetValue(whoAmI, out ServerSession clientSession) && clientSession.Ready)
                     HandleClientWindow(type, reader, clientSession);
+                else if ((type == StatisticsPacketType.NativeLiquidBegin || type == StatisticsPacketType.NativeLiquidCommit)
+                    && sessions.TryGetValue(whoAmI, out ServerSession nativeSession) && nativeSession.Ready)
+                    HandleNativeLiquid(type, reader, nativeSession);
                 return;
             }
             if (Main.netMode != NetmodeID.MultiplayerClient || Main.gameMenu || cursor.Client == Guid.Empty) return;
@@ -272,7 +289,7 @@ namespace ComprehensiveStatistics.Common.Systems
             {
                 if (reader.ReadUInt16() != ImproveGameProtocol.Version) return;
                 Guid client = ImproveGameProtocol.ReadIdentity(reader), server = ImproveGameProtocol.ReadIdentity(reader);
-                var capabilities = (ImproveGameCapability)reader.ReadByte();
+                var capabilities = (ImproveGameCapability)reader.ReadUInt16();
                 if (reader.BaseStream.Position != reader.BaseStream.Length || (capabilities & ~Capabilities) != 0
                     || !cursor.Welcome(client, server, capabilities)) return;
                 Send(StatisticsPacketType.ImproveGameReady, response => ImproveGameProtocol.WriteSession(response, client, server));
@@ -285,6 +302,9 @@ namespace ComprehensiveStatistics.Common.Systems
                 if (Main.LocalPlayer?.active != true) return;
                 foreach (ImproveGameCredit entry in entries)
                 {
+                    if (entry.Kind is TileChangeKind.LiquidPlaced or TileChangeKind.LiquidRemoved)
+                    { if ((cursor.Capabilities & (ImproveGameCapability.Liquid | ImproveGameCapability.NativeLiquid)) == 0
+                            || !ImproveGameProtocol.TryGetLiquid(entry.Content, out _)) return; continue; }
                     if (entry.Kind >= TileChangeKind.WiringPlaced)
                     { if (!ImproveGameProtocol.TryGetWiringComponent(entry.Content, out _)) return; continue; }
                     bool wall = entry.Kind == TileChangeKind.WallPlaced || entry.Kind == TileChangeKind.WallRemoved;
@@ -337,7 +357,7 @@ namespace ComprehensiveStatistics.Common.Systems
             {
                 bool valid = Main.netMode == NetmodeID.Server && !Main.gameMenu && session.Ready && player == session.Player
                     && IsPlayer(player) && sessions.TryGetValue(player.whoAmI, out ServerSession current) && current == session
-                    && (session.Capabilities & capability & requested) != 0;
+                    && (session.Capabilities & Capabilities & capability & requested) != 0;
                 if (!valid) return false;
                 if (Main.GameUpdateCount - lastActivity <= 1800) return true;
                 WarnExpired(session); return false;
@@ -349,6 +369,51 @@ namespace ComprehensiveStatistics.Common.Systems
                 if (!Allows(player, capability)) return TileChangeScope.Suppress();
                 lastActivity = Main.GameUpdateCount;
                 return TileChangeScope.BeginVerified(player, Record);
+            }
+
+            /// <summary>服务器液体任务以独立直接格位结算，绝不读取个人存档。</summary>
+            internal LiquidChangeScope BeginLiquid(Player player, int x, int y)
+            {
+                if (!Allows(player, ImproveGameCapability.Liquid)) return LiquidChangeScope.SuppressWorldUpdates();
+                lastActivity = Main.GameUpdateCount;
+                return LiquidChangeScope.BeginVerified(player, x, y, RecordLiquid);
+            }
+
+            /// <summary>按液体方向聚合原始整数；每项超过上限时拆分，不截断整片工具的体积。</summary>
+            internal void RecordLiquid(LiquidChange change)
+            {
+                if (!Allows(session.Player, ImproveGameCapability.Liquid | ImproveGameCapability.NativeLiquid)) return;
+                lastActivity = Main.GameUpdateCount;
+                if (change.RemovedUnits > 0) QueueLiquid(change.RemovedKind, false, change.RemovedUnits);
+                if (change.PlacedUnits > 0) QueueLiquid(change.PlacedKind, true, change.PlacedUnits);
+            }
+
+            /// <summary>每个分片保持合法稳定键、方向和长整数，沿用连接级队列与发送预算。</summary>
+            private void QueueLiquid(LiquidKind liquid, bool placed, long units)
+            {
+                var kind = placed ? TileChangeKind.LiquidPlaced : TileChangeKind.LiquidRemoved;
+                string name = liquid switch { LiquidKind.Water => "LiquidWater", LiquidKind.Lava => "LiquidLava",
+                    LiquidKind.Honey => "LiquidHoney", LiquidKind.Shimmer => "LiquidShimmer", _ => null };
+                if (name == null) return;
+                var content = new StableContentKey("Terraria", name);
+                for (int part = 0; units > 0 && part < ImproveGameProtocol.MaxPending; part++)
+                {
+                    var key = new PendingKey(task, kind, content, 0, part);
+                    session.Pending.TryGetValue(key, out PendingValue value);
+                    if (value.Count == 0 && session.Pending.Count >= ImproveGameProtocol.MaxPending)
+                    {
+                        if (!session.Warned)
+                        {
+                            session.Warned = true;
+                            ModContent.GetInstance<global::ComprehensiveStatistics.ComprehensiveStatistics>().Logger.Warn(
+                                "Liquid confirmation queue limit reached; unconfirmed overflow was discarded.");
+                        }
+                        return;
+                    }
+                    long add = Math.Min(units, ImproveGameProtocol.MaxCount - value.Count);
+                    if (add > 0) session.Pending[key] = new PendingValue(value.Count + add, Main.GameUpdateCount);
+                    units -= add;
+                }
             }
 
             /// <summary>聚合真实服务器结果；队列和数量超限时丢弃并只记录一次诊断。</summary>
@@ -397,13 +462,15 @@ namespace ComprehensiveStatistics.Common.Systems
             internal ulong NextTask, Sequence;
             internal ulong LastClientOperation;
             internal ServerWindow Window;
+            internal ServerNative NativeWindow;
+            internal ulong LastNativeOperation;
             /// <summary>每个新的角色连接挑战建立全新服务器会话。</summary>
             internal ServerSession(Player player, Guid client, ImproveGameCapability capabilities)
             { Player = player; Client = client; Capabilities = capabilities; }
         }
 
-        /// <summary>按服务器任务及稳定内容聚合；不同任务不会共用同一个提交身份。</summary>
-        internal readonly record struct PendingKey(ulong Task, TileChangeKind Kind, StableContentKey Content, int Style);
+        /// <summary>按服务器任务及稳定内容聚合；Part 仅拆分超过原始单位上限的液体，不改变样式。</summary>
+        internal readonly record struct PendingKey(ulong Task, TileChangeKind Kind, StableContentKey Content, int Style, int Part = 0);
         /// <summary>记录聚合数量与最后实际活动时间，队列不会无限保留。</summary>
         internal readonly record struct PendingValue(long Count, ulong Tick);
     }

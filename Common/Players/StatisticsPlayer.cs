@@ -2003,6 +2003,13 @@ namespace ComprehensiveStatistics.Common.Players
         internal void RecordConfirmedConstruction(ImproveGameCredit credit)
         {
             if (!IsOwnedByLocalClient || !ImproveGameProtocol.IsValid(credit)) return;
+            if (credit.Kind is TileChangeKind.LiquidPlaced or TileChangeKind.LiquidRemoved)
+            {
+                if (ImproveGameProtocol.TryGetLiquid(credit.Content, out LiquidKind liquid))
+                    Record(credit.Kind == TileChangeKind.LiquidPlaced ? StatisticKeys.GetPlacedLiquidKey(liquid)
+                        : StatisticKeys.GetRemovedLiquidKey(liquid), new StatisticMetrics(units: credit.Count));
+                return;
+            }
             if (credit.Kind >= TileChangeKind.WiringPlaced)
             {
                 if (ImproveGameProtocol.TryGetWiringComponent(credit.Content, out WiringComponentKind component))
@@ -2140,6 +2147,18 @@ namespace ComprehensiveStatistics.Common.Players
                 placed
                     ? new StatisticMetrics(events: count)
                     : new StatisticMetrics(units: count));
+        }
+
+        /// <summary>
+        /// 将已确认液体步骤写入本地角色的生涯与当前世界，调用方须先完成直接目标与会话校验。
+        /// LQ3 单人采集器只在明确操作作用域提交；此处不从世界状态自动推断玩家行为。
+        /// </summary>
+        internal void RecordLiquidChange(LiquidChange change)
+        {
+            if (!IsOwnedByLocalClient || change.IsZero)
+                return;
+            EnsureCurrentWorldSlice();
+            Data.AddLiquidChange(currentWorldId, change, DateTimeOffset.UtcNow);
         }
 
         /// <summary>

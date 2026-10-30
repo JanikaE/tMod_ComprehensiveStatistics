@@ -13,7 +13,7 @@ namespace ComprehensiveStatistics.Common.UI
         {
             ImproveGameCapability.Construct, ImproveGameCapability.Building, ImproveGameCapability.Space,
             ImproveGameCapability.BurstSelector, ImproveGameCapability.FixedBurst, ImproveGameCapability.WallSelector,
-            ImproveGameCapability.Robot, ImproveGameCapability.Vein
+            ImproveGameCapability.Robot, ImproveGameCapability.Vein, ImproveGameCapability.Liquid
         };
 
         /// <summary>按当前语言生成短行提示；状态每次悬停重新取得，握手完成后无需重开窗口。</summary>
@@ -29,6 +29,7 @@ namespace ComprehensiveStatistics.Common.UI
             }
             lines.Add(string.Empty);
             lines.Add(Text("ReplacementRule"));
+            lines.Add(Text("LiquidRule"));
             lines.Add(Text("HistoryRule"));
             lines.Add(Text("MultiplayerRule"));
             lines.Add(Text("Limits"));

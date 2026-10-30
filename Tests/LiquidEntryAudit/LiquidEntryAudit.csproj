@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(TmlPath)/Libraries/mono.cecil/**/netstandard2.0/Mono.Cecil.dll" />
+  </ItemGroup>
+  <Target Name="RequireTmlPath" BeforeTargets="ResolveReferences" Condition="'$(TmlPath)' == ''">
+    <Error Text="Pass -p:TmlPath=the tModLoader install directory." />
+  </Target>
+</Project>

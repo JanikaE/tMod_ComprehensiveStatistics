@@ -37,5 +37,15 @@ namespace ComprehensiveStatistics.Common.Statistics
         {
             entries[(tab, worldId)] = state;
         }
+
+        /// <summary>公共筛选改变时所有列表回顶部，保留各范围原有排序。</summary>
+        internal void ResetScrollPositions()
+        {
+            foreach (var key in new List<(string Tab, Guid? WorldId)>(entries.Keys))
+            {
+                var state = entries[key];
+                entries[key] = new StatisticsListViewState(state.SortColumn, state.SortDirection, 0f);
+            }
+        }
     }
 }

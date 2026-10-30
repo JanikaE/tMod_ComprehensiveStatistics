@@ -16,19 +16,20 @@ UI: {
 		Version: 已加载版本：{0}
 		ToolLine: "{0}：{1}"
 		ReplacementRule: 成功替换分别增加旧内容拆除与新内容放置。
+		LiquidRule: 液体子页按实际体积统计；255 原始单位 = 1 格。
 		HistoryRule: 保留已有记录；此前漏计的数量不补算。
 		MultiplayerRule: 多人需双方更新；只统计服务器确认的施工。
-		Limits: 多人每步骤最多确认 8192 格，超限步骤不计。
+		Limits: 多人物块施工每步骤最多确认 8192 格，超限步骤不计。
 		FurnitureLimit: 多人新家具最多完整同步 32×32 格，超限步骤不计。
 
 		States: {
 			NotInstalled: 更好的体验未加载；原有统计和历史记录不受影响。
 			UnsupportedVersion: 需要更好的体验 1.8.2 或更高版本，工具统计未启用。
-			SinglePlayer: 单人：已启用 {0}/8 项工具统计。
+			SinglePlayer: 单人：已启用 {0}/9 项工具统计。
 			WaitingForServer: 多人：正在确认服务器支持情况……
 			ServerUnavailable: 多人：服务器尚未确认支持，工具计数未启用。
 			NoCompatibleTools: 当前没有可用的工具统计能力。
-			MultiplayerReady: 多人：已启用 {0}/8 项工具统计。
+			MultiplayerReady: 多人：已启用 {0}/9 项工具统计。
 		}
 
 		Availability: {
@@ -46,10 +47,27 @@ UI: {
 			WallSelector: 科技魔杖：框选墙
 			Robot: 科技魔杖：墙机器人
 			Vein: 内置连锁挖矿
+			Liquid: 液体魔杖
 		}
 	}
 
 	Blocks: {
+		Liquids: {
+			Water: 水
+			Lava: 熔岩
+			Honey: 蜂蜜
+			Shimmer: 微光
+		}
+
+		LiquidsGroup: 液体合计
+		LiquidPlacedColumn: 放置量（格）
+		LiquidRemovedColumn: 移除量（格）
+		LiquidVolumeTooltip:
+			'''
+			放置：{0:N0} 原始单位
+			移除：{1:N0} 原始单位
+			255 单位 = 1 满格
+			'''
 		SolidTilesGroup: 物块
 		BackgroundWallsGroup: 背景墙
 		WiringComponentsGroup: 电线与制动器
@@ -256,10 +274,19 @@ UI: {
 		}
 	}
 
+	SubTabs: {
+		Blocks: {
+			Tiles: 物块
+			Walls: 背景墙
+			Wiring: 电路
+			Liquids: 液体
+		}
+	}
+
 	Tabs: {
 		Blocks: {
 			Title: 物块
-			Description: 物块、背景墙、电线、制动器和家具的放置与拆除。
+			Description: 分页查看物块、背景墙、电路和液体统计。
 		}
 
 		Items: {

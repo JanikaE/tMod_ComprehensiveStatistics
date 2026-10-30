@@ -4,13 +4,13 @@ using System.Collections.Generic;
 namespace ComprehensiveStatistics.Common.Statistics
 {
     /// <summary>
-    /// 定义当前统计存档格式版本；格式发生不兼容变化时必须递增此值。
+    /// 定义当前统计存档及统计口径版本；按设计在新增或改变统计含义时递增。
     /// </summary>
     internal static class StatisticsDataFormat
     {
-        internal const int CurrentVersion = 3;
+        internal const int CurrentVersion = 4;
 
-        /// <summary>版本 3 扩展替换拆除口径，沿用版本 1/2 字段并保留已有累计，不倒推历史拆除。</summary>
+        /// <summary>版本 4 新增整数液体体积键；版本 1/2/3 原字段与累计原样保留，不倒推历史液体或拆除。</summary>
         internal static bool CanLoad(int version) => version >= 1 && version <= CurrentVersion;
     }
 
@@ -147,6 +147,8 @@ namespace ComprehensiveStatistics.Common.Statistics
 
         internal StatisticsListViewStateStore ListViewStates { get; } = new();
 
+        internal Dictionary<string, string> SelectedSubTabs { get; } = new(StringComparer.Ordinal);
+
         /// <summary>
         /// 获取指定世界切片；不存在时以当前时间创建。
         /// </summary>
@@ -173,6 +175,25 @@ namespace ComprehensiveStatistics.Common.Statistics
             // 同一玩家行为的两份归属在一个入口提交，采集器不能漏写其中一个范围。
             Career.Add(key, delta);
             GetOrCreateWorldSlice(worldId, startedAtUtc).Add(key, delta);
+        }
+
+        /// <summary>
+        /// 将一个已确认液体步骤的两个方向分别写入双范围，保留原始整数精度。
+        /// 本入口不判断来源；调用方必须先确认玩家归属、世界会话与直接操作证据。
+        /// </summary>
+        internal void AddLiquidChange(Guid worldId, LiquidChange change, DateTimeOffset startedAtUtc)
+        {
+            // 只有实际非零方向才能进入 Add，空步骤不能创建世界切片或改变开始时间。
+            if (change.RemovedUnits > 0)
+            {
+                Add(worldId, StatisticKeys.GetRemovedLiquidKey(change.RemovedKind),
+                    new StatisticMetrics(units: change.RemovedUnits), startedAtUtc);
+            }
+            if (change.PlacedUnits > 0)
+            {
+                Add(worldId, StatisticKeys.GetPlacedLiquidKey(change.PlacedKind),
+                    new StatisticMetrics(units: change.PlacedUnits), startedAtUtc);
+            }
         }
 
         /// <summary>

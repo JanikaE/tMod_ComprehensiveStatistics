@@ -1,4 +1,5 @@
 using System;
+using ComprehensiveStatistics.Common.Statistics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
@@ -66,6 +67,10 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private Asset<Texture2D> economySpecialCurrencyIcon;
         private float iconOffset = IconCenter;
         private Color economyCoinIconColor = Color.White;
+        private bool showLiquidTooltip;
+        private long liquidPlaced, liquidRemoved;
+        internal string HoveredMetricTooltip => showLiquidTooltip && IsMouseHovering
+            ? Language.GetTextValue("Mods.ComprehensiveStatistics.UI.Blocks.LiquidVolumeTooltip", liquidPlaced, liquidRemoved) : null;
 
         /// <summary>
         /// 创建可在分组与叶子项之间复用的统计列表行。
@@ -237,6 +242,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         /// </summary>
         internal void ClearBinding()
         {
+            showLiquidTooltip = false;
             // 行池中暂时无对应数据的控件必须清空，避免残留旧内容或点击动作。
             clickAction = null;
             iconType = 0;
@@ -551,6 +557,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             {
                 StatisticsMetricDisplay.Mixed => MixedNameRightReserve,
                 StatisticsMetricDisplay.WiringActivity => MixedNameRightReserve,
+                StatisticsMetricDisplay.LiquidVolume => MixedNameRightReserve,
                 StatisticsMetricDisplay.ItemActivity => ItemActivityNameRightReserve,
                 StatisticsMetricDisplay.AmmoActivity => ItemActivityNameRightReserve,
                 StatisticsMetricDisplay.FishingActivity => MixedNameRightReserve,
@@ -577,6 +584,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             Asset<Texture2D> amountIcon)
         {
             HideEconomyCoins();
+            showLiquidTooltip = metricDisplay == StatisticsMetricDisplay.LiquidVolume;
+            liquidPlaced = events;
+            liquidRemoved = units;
             eventsText.Left.Set(-MixedEventsRight, 0f);
             unitsText.Left.Set(-ItemActivityUseEventsRight, 0f);
             valueText.Left.Set(-4f, 0f);
@@ -648,12 +658,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 return;
             }
 
-            if (metricDisplay == StatisticsMetricDisplay.WiringActivity)
+            if (metricDisplay is StatisticsMetricDisplay.WiringActivity or StatisticsMetricDisplay.LiquidVolume)
             {
                 eventsText.Left.Set(-MixedEventsRight, 0f);
-                eventsText.SetText(events.ToString("N0"));
+                eventsText.SetText(showLiquidTooltip ? LiquidVolumeDisplay.Format(events) : events.ToString("N0"));
                 unitsText.SetText(string.Empty);
-                valueText.SetText(units.ToString("N0"));
+                valueText.SetText(showLiquidTooltip ? LiquidVolumeDisplay.Format(units) : units.ToString("N0"));
                 return;
             }
 
@@ -733,7 +743,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 eventsText.TextColor = events == 0L ? dimmedColor : normalColor;
                 valueText.TextColor = amount == 0L ? dimmedColor : normalColor;
             }
-            else if (metricDisplay == StatisticsMetricDisplay.WiringActivity)
+            else if (metricDisplay is StatisticsMetricDisplay.WiringActivity or StatisticsMetricDisplay.LiquidVolume)
             {
                 eventsText.TextColor = events == 0L ? dimmedColor : normalColor;
                 valueText.TextColor = units == 0L ? dimmedColor : normalColor;

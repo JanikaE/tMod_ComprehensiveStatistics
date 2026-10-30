@@ -47,7 +47,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         FishingEvents,
         FishingCatchActivity,
         KillOutcomes,
-        EconomyTransactions
+        EconomyTransactions,
+        LiquidVolume
     }
 
     /// <summary>

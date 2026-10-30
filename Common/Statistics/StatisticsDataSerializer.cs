@@ -65,7 +65,7 @@ namespace ComprehensiveStatistics.Common.Statistics
                 });
             }
 
-            return new TagCompound
+            TagCompound result = new TagCompound
             {
                 [FormatVersionKey] = StatisticsDataFormat.CurrentVersion,
                 [CareerKey] = SerializeScope(data.Career),
@@ -73,6 +73,10 @@ namespace ComprehensiveStatistics.Common.Statistics
                 [ExpansionStatesKey] = SerializeExpansionStates(data.ExpansionStates),
                 ["ListViewStates"] = SerializeListViewStates(data.ListViewStates)
             };
+            if (data.SelectedSubTabs.Count > 0)
+                result["SelectedSubTabs"] = data.SelectedSubTabs.OrderBy(p => p.Key, StringComparer.Ordinal)
+                    .Select(p => new TagCompound { ["Tab"] = p.Key, ["SubTab"] = p.Value }).ToList();
+            return result;
         }
 
         /// <summary>
@@ -196,6 +200,7 @@ namespace ComprehensiveStatistics.Common.Statistics
                     return false;
                 }
 
+                // 版本 1–4 共用条目结构；仅将版本标记升级到当前值，原始指标不换算、不补算。
                 StatisticsData loadedData = new StatisticsData(StatisticsDataFormat.CurrentVersion, startedAtUtc);
                 for (int index = 0; index < entryCount; index++)
                 {
@@ -315,6 +320,8 @@ namespace ComprehensiveStatistics.Common.Statistics
                     DeserializeExpansionStates(root);
                 data = new CharacterStatisticsData(career, worldSlices, expansionStates);
                 DeserializeListViewStates(root, data.ListViewStates);
+                DeserializeSubTabs(root, data);
+                StatisticsSubTabs.Migrate(data);
                 return true;
             }
             catch (Exception exception)
@@ -421,6 +428,27 @@ namespace ComprehensiveStatistics.Common.Statistics
             }
 
             return store;
+        }
+
+        /// <summary>读取可选的角色子页选择；单项损坏或未知身份不影响统计和其他页面。</summary>
+        private static void DeserializeSubTabs(TagCompound root, CharacterStatisticsData data)
+        {
+            if (!root.ContainsKey("SelectedSubTabs")) return;
+            try
+            {
+                foreach (TagCompound tag in root.GetList<TagCompound>("SelectedSubTabs").Take(128))
+                {
+                    try
+                    {
+                        if (tag == null) continue;
+                        string main = tag.GetString("Tab");
+                        string id = StatisticsSubTabs.Resolve(main, tag.GetString("SubTab"));
+                        if (id != null) data.SelectedSubTabs[main] = id;
+                    }
+                    catch (Exception error) when (IsRecoverableDataError(error)) { }
+                }
+            }
+            catch (Exception error) when (IsRecoverableDataError(error)) { }
         }
 
         /// <summary>以稳定字符串保存排序枚举，避免未来枚举插入导致旧存档含义变化。</summary>
@@ -553,6 +581,7 @@ namespace ComprehensiveStatistics.Common.Statistics
 
                 DateTimeOffset startedAtUtc =
                     DateTimeOffset.FromUnixTimeMilliseconds(tag.GetLong(StartedAtKey));
+                // 液体只新增稳定键并使用既有 Units；旧范围的开始时间、累计与内容身份原样保留。
                 StatisticsData loadedData = new StatisticsData(StatisticsDataFormat.CurrentVersion, startedAtUtc);
                 IList<TagCompound> entryTags = Array.Empty<TagCompound>();
                 if (tag.ContainsKey(EntriesKey))

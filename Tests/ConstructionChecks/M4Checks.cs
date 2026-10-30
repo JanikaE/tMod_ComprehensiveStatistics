@@ -44,9 +44,9 @@ internal static class M4Checks
         Client(welcome.Bytes);var ready=Take().Single();Server(ready.Bytes,0);
         Game.netMode=1;Game.dedServ=false;
         Assert(ImproveGameMultiplayerSystem.GetDisplayStatus().State==ImproveGameCompatibilityState.MultiplayerReady
-            && ImproveGameMultiplayerSystem.GetDisplayStatus().EnabledCount==8,"UI snapshot reflects negotiated capabilities");
+            && ImproveGameMultiplayerSystem.GetDisplayStatus().EnabledCount==9,"UI snapshot reflects negotiated capabilities");
         Guid client1=Guid.NewGuid();Server(Frame(StatisticsPacketType.ImproveGameHello,w=>
-        {w.Write(ImproveGameProtocol.Version);w.Write(client1.ToByteArray());w.Write((byte)ImproveGameProtocol.All);}),1);
+        {w.Write(ImproveGameProtocol.Version);w.Write(client1.ToByteArray());w.Write((ushort)ImproveGameProtocol.All);}),1);
         var welcome1=Take().Single();Guid server1;
         using(var frame=Body(welcome1.Bytes)){frame.ReadUInt16();ImproveGameProtocol.ReadIdentity(frame);server1=ImproveGameProtocol.ReadIdentity(frame);}
         Server(Frame(StatisticsPacketType.ImproveGameReady,w=>ImproveGameProtocol.WriteSession(w,client1,server1)),1);
@@ -112,11 +112,11 @@ internal static class M4Checks
         Server(Frame(StatisticsPacketType.ImproveGameHello,w=>{w.Write((ushort)99);w.Write(client0.ToByteArray());w.Write((byte)15);}),0);
         Assert(Take().Count==0,"protocol mismatch has no capability agreement");
         Guid limitedClient=Guid.NewGuid();Server(Frame(StatisticsPacketType.ImproveGameHello,w=>
-        {w.Write(ImproveGameProtocol.Version);w.Write(limitedClient.ToByteArray());w.Write((byte)ImproveGameCapability.Space);}),0);
+        {w.Write(ImproveGameProtocol.Version);w.Write(limitedClient.ToByteArray());w.Write((ushort)ImproveGameCapability.Space);}),0);
         var limitedWelcome=Take().Single();Guid limitedServer;
         using(var frame=Body(limitedWelcome.Bytes))
         {frame.ReadUInt16();ImproveGameProtocol.ReadIdentity(frame);limitedServer=ImproveGameProtocol.ReadIdentity(frame);
-            Assert((ImproveGameCapability)frame.ReadByte()==ImproveGameCapability.Space,"handshake advertises capability intersection");}
+            Assert((ImproveGameCapability)frame.ReadUInt16()==ImproveGameCapability.Space,"handshake advertises capability intersection");}
         Server(Frame(StatisticsPacketType.ImproveGameReady,w=>ImproveGameProtocol.WriteSession(w,client0,server0)),0);
         Put(4);Space(0);Assert(Flush().Count==0,"old ready cannot activate a replacement session");
         Server(Frame(StatisticsPacketType.ImproveGameReady,w=>ImproveGameProtocol.WriteSession(w,limitedClient,limitedServer)),0);

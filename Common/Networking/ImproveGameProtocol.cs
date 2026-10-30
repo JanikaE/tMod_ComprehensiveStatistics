@@ -12,13 +12,14 @@ namespace ComprehensiveStatistics.Common.Networking
     /// <summary>定义有界协议与原子解析；包必须完全合法后才更新去重游标及角色数据。</summary>
     internal static class ImproveGameProtocol
     {
-        internal const ushort Version = 2;
+        internal const ushort Version = 3;
         internal const int MaxEntries = 24;
         internal const int MaxBodyBytes = 32768;
         internal const int MaxPending = 4096;
         internal const long MaxCount = 1_000_000;
         internal const ImproveGameCapability All = ImproveGameCapability.Space | ImproveGameCapability.BurstSelector
-            | ImproveGameCapability.WallSelector | ImproveGameCapability.Vein | ClientCapabilities;
+            | ImproveGameCapability.WallSelector | ImproveGameCapability.Vein | ClientCapabilities
+            | ImproveGameCapability.Liquid | ImproveGameCapability.NativeLiquid;
         internal const ImproveGameCapability ClientCapabilities = ImproveGameCapability.Construct | ImproveGameCapability.Building
             | ImproveGameCapability.FixedBurst | ImproveGameCapability.Robot;
 
@@ -84,13 +85,28 @@ namespace ComprehensiveStatistics.Common.Networking
             { entries = null; return false; }
         }
 
-        /// <summary>仅接收当前施工能力的内容/组件结果与正数数量，不接受任意指标。</summary>
-        internal static bool IsValid(ImproveGameCredit value) => value.Kind >= TileChangeKind.TilePlaced
-            && value.Kind <= TileChangeKind.WiringRemoved && ValidName(value.Content.ModName)
-            && ValidName(value.Content.ContentName) && value.Count > 0 && value.Count <= MaxCount
-            && ((value.Kind == TileChangeKind.ObjectPlaced || value.Kind == TileChangeKind.ObjectRemoved)
-                ? value.Style >= 0 && value.Style <= ushort.MaxValue : value.Style == 0)
-            && (value.Kind < TileChangeKind.WiringPlaced || TryGetWiringComponent(value.Content, out _));
+        /// <summary>按结果种类校验白名单、样式及正数量；液体数量是原始单位，不能按格解释。</summary>
+        internal static bool IsValid(ImproveGameCredit value)
+        {
+            if (value.Kind < TileChangeKind.TilePlaced || value.Kind > TileChangeKind.LiquidRemoved
+                || !ValidName(value.Content.ModName) || !ValidName(value.Content.ContentName)
+                || value.Count <= 0 || value.Count > MaxCount) return false;
+            if (value.Kind is TileChangeKind.LiquidPlaced or TileChangeKind.LiquidRemoved)
+                return value.Style == 0 && TryGetLiquid(value.Content, out _);
+            if (value.Kind is TileChangeKind.WiringPlaced or TileChangeKind.WiringRemoved)
+                return value.Style == 0 && TryGetWiringComponent(value.Content, out _);
+            return value.Kind is TileChangeKind.ObjectPlaced or TileChangeKind.ObjectRemoved
+                ? value.Style >= 0 && value.Style <= ushort.MaxValue : value.Style == 0;
+        }
+
+        /// <summary>只接收四种标准液体稳定键，不接受服务器指定任意统计或未知液体。</summary>
+        internal static bool TryGetLiquid(StableContentKey content, out LiquidKind liquid)
+        {
+            int index = content.ModName == "Terraria" ? content.ContentName switch
+            { "LiquidWater" => 0, "LiquidLava" => 1, "LiquidHoney" => 2, "LiquidShimmer" => 3, _ => -1 } : -1;
+            liquid = (LiquidKind)index;
+            return index >= 0;
+        }
 
         /// <summary>只接受既有五种稳定布线组件键，不让网络端创建任意组件。</summary>
         internal static bool TryGetWiringComponent(StableContentKey content, out WiringComponentKind component)

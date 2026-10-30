@@ -16,19 +16,20 @@ UI: {
 		Version: Loaded version: {0}
 		ToolLine: "{0}: {1}"
 		ReplacementRule: Replacements add both removal and placement.
+		LiquidRule: Liquids use actual volume: 255 raw units = 1 tile.
 		HistoryRule: Existing records stay; earlier missing counts cannot be recovered.
 		MultiplayerRule: Both sides must update; only server-confirmed work counts.
-		Limits: Multiplayer: up to 8192 tiles/step; larger steps are omitted.
+		Limits: Multiplayer block work: up to 8192 tiles/step; larger steps are omitted.
 		FurnitureLimit: Multiplayer furniture: up to 32×32 tiles; larger steps are omitted.
 
 		States: {
 			NotInstalled: ImproveGame is not loaded; existing statistics and records stay.
 			UnsupportedVersion: Requires ImproveGame 1.8.2 or later; tool statistics are disabled.
-			SinglePlayer: Single-player: {0}/8 tool statistics enabled.
+			SinglePlayer: Single-player: {0}/9 tool statistics enabled.
 			WaitingForServer: Multiplayer: checking server support...
 			ServerUnavailable: Multiplayer: server support is unconfirmed; tool counts are disabled.
 			NoCompatibleTools: No compatible tool statistics are available for this session.
-			MultiplayerReady: Multiplayer: {0}/8 tool statistics enabled.
+			MultiplayerReady: Multiplayer: {0}/9 tool statistics enabled.
 		}
 
 		Availability: {
@@ -46,10 +47,27 @@ UI: {
 			WallSelector: Tech wand: wall selection
 			Robot: Tech wand: wall robot
 			Vein: Built-in vein mining
+			Liquid: Liquid wands
 		}
 	}
 
 	Blocks: {
+		Liquids: {
+			Water: Water
+			Lava: Lava
+			Honey: Honey
+			Shimmer: Shimmer
+		}
+
+		LiquidsGroup: Liquid total
+		LiquidPlacedColumn: Placed (tiles)
+		LiquidRemovedColumn: Removed (tiles)
+		LiquidVolumeTooltip:
+			'''
+			Placed: {0:N0} raw units
+			Removed: {1:N0} raw units
+			255 units = 1 full tile
+			'''
 		SolidTilesGroup: Blocks
 		BackgroundWallsGroup: Background walls
 		WiringComponentsGroup: Wires and actuators
@@ -256,10 +274,19 @@ UI: {
 		}
 	}
 
+	SubTabs: {
+		Blocks: {
+			Tiles: Blocks
+			Walls: Walls
+			Wiring: Circuits
+			Liquids: Liquids
+		}
+	}
+
 	Tabs: {
 		Blocks: {
 			Title: Blocks
-			Description: Placement and removal of blocks, walls, wires, actuators, and furniture.
+			Description: Browse block, wall, circuit, and liquid statistics.
 		}
 
 		Items: {

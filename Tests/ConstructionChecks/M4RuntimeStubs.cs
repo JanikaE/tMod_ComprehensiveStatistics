@@ -13,7 +13,7 @@ namespace ComprehensiveStatistics.Common.Networking
 {
     /// <summary>数值与生产网络分派一致。</summary>
     internal enum StatisticsPacketType : byte
-    { ImproveGameHello=8, ImproveGameWelcome=9, ImproveGameReady=10, ImproveGameCreditBatch=11, ImproveGameClientBegin=12, ImproveGameClientTargets=13, ImproveGameClientCommit=14 }
+    { ImproveGameHello=8, ImproveGameWelcome=9, ImproveGameReady=10, ImproveGameCreditBatch=11, ImproveGameClientBegin=12, ImproveGameClientTargets=13, ImproveGameClientCommit=14, NativeLiquidBegin=15, NativeLiquidCommit=16 }
 }
 namespace ComprehensiveStatistics.Common.Statistics
 {

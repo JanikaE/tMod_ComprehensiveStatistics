@@ -34,7 +34,7 @@ namespace ComprehensiveStatistics.Common.Statistics
         /// <summary>按工具区分本机未适配、等待服务器和双方实际启用，不根据单个总开关推断全覆盖。</summary>
         internal ImproveGameToolAvailability GetAvailability(ImproveGameCapability capability)
         {
-            int bits = (byte)capability;
+            int bits = (ushort)capability;
             if (bits == 0 || (bits & (bits - 1)) != 0 || (Local & capability) == 0) return ImproveGameToolAvailability.Disabled;
             if ((Active & capability) != 0) return ImproveGameToolAvailability.Enabled;
             return State == ImproveGameCompatibilityState.WaitingForServer ? ImproveGameToolAvailability.Waiting

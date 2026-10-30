@@ -16,7 +16,7 @@ namespace Terraria
     /// <summary>补充适配器读取的鼠标坐标。</summary>
     internal static partial class Main { internal static Microsoft.Xna.Framework.MousePoint MouseWorld; }
     /// <summary>模拟放置物品参数。</summary>
-    internal sealed class Item { internal int createTile = 2, createWall = 2; }
+    internal sealed partial class Item { internal int createTile = 2, createWall = 2; }
     /// <summary>用于验证 out 参数完整传回。</summary>
     internal struct TileObject { internal int Marker; }
     internal static partial class WorldGen
@@ -74,7 +74,7 @@ namespace Terraria
         internal static bool PlaceActuator(int x, int y) => On_WorldGen.PlaceActuator?.Invoke((i,j) => Main.Tiles[i,j].HasActuator=true,x,y) ?? (Main.Tiles[x,y].HasActuator=true);
     }
     /// <summary>模拟 HookGen 事件签名，不替代真实 MonoMod 方法 Hook。</summary>
-    internal static class On_WorldGen
+    internal static partial class On_WorldGen
     {
         internal delegate bool orig_PlaceTile(int x,int y,int type,bool mute,bool forced,int player,int style);
         internal delegate bool hook_PlaceTile(orig_PlaceTile orig,int x,int y,int type,bool mute,bool forced,int player,int style);

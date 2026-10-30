@@ -103,7 +103,7 @@ namespace ComprehensiveStatistics.Common.Systems
                 if (started || !IsCurrent) return;
                 started = true;
                 Send(StatisticsPacketType.ImproveGameClientBegin, writer =>
-                { ImproveGameProtocol.WriteSession(writer, client, server); writer.Write(operation); writer.Write((byte)capability); });
+                { ImproveGameProtocol.WriteSession(writer, client, server); writer.Write(operation); writer.Write((ushort)capability); });
             }
 
             /// <summary>先保存待同步空缺；底层 Kill 尚未返回原版 PickTile，不能抢在原版拆除包之前发送。</summary>
@@ -232,8 +232,8 @@ namespace ComprehensiveStatistics.Common.Systems
             ulong operation = reader.ReadUInt64();
             if (type == StatisticsPacketType.ImproveGameClientBegin)
             {
-                var capability = (ImproveGameCapability)reader.ReadByte();
-                int bits = (byte)capability;
+                var capability = (ImproveGameCapability)reader.ReadUInt16();
+                int bits = (ushort)capability;
                 if (operation == 0 || operation <= session.LastClientOperation || bits == 0 || (bits & (bits - 1)) != 0
                     || (session.Capabilities & ImproveGameProtocol.ClientCapabilities & capability) == 0
                     || reader.BaseStream.Position != reader.BaseStream.Length || session.NextTask == ulong.MaxValue) return;

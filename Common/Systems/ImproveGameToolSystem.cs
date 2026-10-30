@@ -48,6 +48,8 @@ namespace ComprehensiveStatistics.Common.Systems
                 Mod.Logger.Warn($"ImproveGame {mod.Version}: tool collection requires version 1.8.2 or later.");
                 return;
             }
+            // 液体也使用 Selector 工厂；必须先装其叶子和实际迭代器，再编译共享工具/接收调用方。
+            ModContent.GetInstance<StatisticsLiquidSystem>().InstallImproveGame(mod);
             Assembly code = mod.Code;
             bool space = InstallGroup("SpaceWand", group => InstallSpace(code, group));
             int selectorStart = hooks.Count;

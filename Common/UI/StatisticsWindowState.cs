@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using ComprehensiveStatistics.Common.Players;
 using ComprehensiveStatistics.Common.Systems;
 using ComprehensiveStatistics.Common.Statistics;
@@ -81,7 +82,9 @@ namespace ComprehensiveStatistics.Common.UI
         private HeaderActionButton expandCollapseButton;
         private CompatibilityInfoButton compatibilityInfoButton;
         private StatisticsToolbar toolbar;
-        private VirtualizedStatisticsList blockList;
+        private string selectedBlockSubTab = "Tiles";
+        private readonly Dictionary<string, StatisticsSubTabBar> subTabBars = new();
+        private VirtualizedStatisticsList blockList => statisticsLists["Blocks/" + selectedBlockSubTab];
         private VirtualizedStatisticsList itemList;
         private VirtualizedStatisticsList ammoList;
         private VirtualizedStatisticsList interactionList;
@@ -91,7 +94,7 @@ namespace ComprehensiveStatistics.Common.UI
         private VirtualizedStatisticsList baitList;
         private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
-        private VirtualizedStatisticsList[] statisticsLists;
+        private Dictionary<string, VirtualizedStatisticsList> statisticsLists;
         private UIImageButton closeButton;
         private int selectedTabIndex;
         private Point lastViewportSize;
@@ -123,7 +126,7 @@ namespace ComprehensiveStatistics.Common.UI
                 return;
             }
 
-            foreach (VirtualizedStatisticsList statisticsList in statisticsLists)
+            foreach (VirtualizedStatisticsList statisticsList in statisticsLists.Values)
             {
                 statisticsList.ResetTransientState();
             }
@@ -135,10 +138,14 @@ namespace ComprehensiveStatistics.Common.UI
         internal void BeginRuntimeStatisticsAccess()
         {
             runtimeStatisticsAccessEnabled = true;
+            foreach (var page in StatisticsSubTabs.For("Blocks")) statisticsLists[page.PageKey].Remove();
+            isBlockListAttached = false;
+            var data = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().Data;
+            data.SelectedSubTabs.TryGetValue("Blocks", out string savedSubTab);
+            selectedBlockSubTab = StatisticsSubTabs.Resolve("Blocks", savedSubTab);
             toolbar.RefreshLocalizedText();
             UpdateWindowHeaderLayout();
-            UpdatePageHeading();
-            RestoreActiveExpansionState();
+            SelectTab(selectedTabIndex, playSound: false, saveCurrent: false);
         }
 
         /// <summary>
@@ -146,6 +153,8 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         internal void EndRuntimeStatisticsAccess()
         {
+            SaveActiveExpansionState();
+            SaveActiveListViewState();
             runtimeStatisticsAccessEnabled = false;
         }
 
@@ -232,13 +241,6 @@ namespace ComprehensiveStatistics.Common.UI
             contentDescription.DynamicallyScaleDownToWidth = true;
             contentPanel.Append(contentDescription);
 
-            blockList = new VirtualizedStatisticsList(
-                CreateBlockGroups(data: null),
-                StatisticsMetricDisplay.WiringActivity);
-            blockList.Top.Set(ListTop, 0f);
-            blockList.Width.Set(0f, 1f);
-            blockList.Height.Set(-ListTop, 1f);
-
             survivalList = new VirtualizedStatisticsList(
                 CreateSurvivalGroups(data: null),
                 StatisticsMetricDisplay.Mixed);
@@ -302,27 +304,37 @@ namespace ComprehensiveStatistics.Common.UI
             baitList.Width.Set(0f, 1f);
             baitList.Height.Set(-ListTop, 1f);
 
-            // 顺序与 Tab 索引保持一致，使通用筛选和瞬时状态不会漏接某个真实数据页。
-            statisticsLists = new[]
+            // 页面身份与导航位置解耦，子页拥有独立的列表及持久化视图。
+            statisticsLists = new Dictionary<string, VirtualizedStatisticsList>
             {
-                blockList,
-                itemList,
-                ammoList,
-                interactionList,
-                killList,
-                economyList,
-                fishingList,
-                baitList,
-                movementList,
-                survivalList
+                ["Items"] = itemList,
+                ["Ammo"] = ammoList,
+                ["Interactions"] = interactionList,
+                ["Kills"] = killList,
+                ["Economy"] = economyList,
+                ["Fishing"] = fishingList,
+                ["Bait"] = baitList,
+                ["Movement"] = movementList,
+                ["Survival"] = survivalList
             };
-            if (statisticsLists.Length != TabCount)
+            foreach (string mainTab in TabLocalizationKeys)
             {
-                throw new InvalidOperationException(
-                    "Every statistics tab must register exactly one filterable list.");
+                var pages = StatisticsSubTabs.For(mainTab);
+                if (pages.Count == 0) continue;
+                foreach (var page in pages)
+                {
+                    var list = new VirtualizedStatisticsList(CreateBlockPageGroups(null, page.Id),
+                        page.Id == "Liquids" ? StatisticsMetricDisplay.LiquidVolume : StatisticsMetricDisplay.WiringActivity);
+                    list.Width.Set(0f, 1f);
+                    statisticsLists[page.PageKey] = list;
+                }
+                var bar = new StatisticsSubTabBar(pages, SelectBlockSubTab);
+                bar.Top.Set(ToolbarTop + ToolbarHeight + 6f, 0f);
+                bar.LayoutChanged += UpdateListLayout;
+                subTabBars[mainTab] = bar;
             }
 
-            foreach (VirtualizedStatisticsList statisticsList in statisticsLists)
+            foreach (VirtualizedStatisticsList statisticsList in statisticsLists.Values)
             {
                 statisticsList.ExpansionStateChanged += UpdateExpandCollapseButton;
                 statisticsList.ExpansionStateCommitted += SaveActiveExpansionState;
@@ -379,6 +391,8 @@ namespace ComprehensiveStatistics.Common.UI
                 UICommon.TooltipMouseText(ImproveGameCompatibilityText.Format(ImproveGameMultiplayerSystem.GetDisplayStatus()));
             else if (closeButton.IsMouseHovering)
                 UICommon.TooltipMouseText(Language.GetTextValue("Mods.ComprehensiveStatistics.UI.CloseButtonTooltip"));
+            else if (GetActiveStatisticsList()?.HoveredMetricTooltip is string metricTooltip)
+                UICommon.TooltipMouseText(metricTooltip);
         }
 
         /// <summary>
@@ -395,13 +409,18 @@ namespace ComprehensiveStatistics.Common.UI
         /// <summary>
         /// 选择有效页面，并同步内容挂载和选中外观。
         /// </summary>
-        private void SelectTab(int tabIndex, bool playSound = true)
+        private void SelectTab(int tabIndex, bool playSound = true, bool saveCurrent = true)
         {
             if (tabIndex < 0 || tabIndex >= TabCount)
             {
                 return;
             }
 
+            if (saveCurrent)
+            {
+                SaveActiveExpansionState();
+                SaveActiveListViewState();
+            }
             bool changed = selectedTabIndex != tabIndex;
             selectedTabIndex = tabIndex;
             UpdatePageHeading();
@@ -415,6 +434,16 @@ namespace ComprehensiveStatistics.Common.UI
             SetBaitTotalsVisible(tabIndex == BaitTabIndex);
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
+            foreach (var pair in subTabBars)
+            {
+                pair.Value.Remove();
+                if (pair.Key != TabLocalizationKeys[selectedTabIndex]) continue;
+                contentPanel.Append(pair.Value);
+                pair.Value.Select(selectedBlockSubTab);
+                pair.Value.Recalculate();
+                pair.Value.RefreshLayout();
+            }
+            UpdateListLayout();
 
             // 列表是在切换 Tab 时动态挂载的，必须把工具栏重新放到绘制顺序末尾。
             // 否则 UISearchBar 画在输入框下方的 IME 候选面板会被列表行覆盖。
@@ -521,6 +550,8 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             Recalculate();
+            foreach (var bar in subTabBars.Values.Where(b => b.Parent != null)) bar.RefreshLayout();
+            UpdateListLayout();
         }
 
         /// <summary>
@@ -547,10 +578,12 @@ namespace ComprehensiveStatistics.Common.UI
             string searchQuery,
             StatisticsContentSourceFilter sourceFilter)
         {
-            foreach (VirtualizedStatisticsList statisticsList in statisticsLists)
+            foreach (VirtualizedStatisticsList statisticsList in statisticsLists.Values)
             {
                 statisticsList.SetFilters(searchQuery, sourceFilter);
             }
+            if (CanReadRuntimeStatistics)
+                Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().Data.ListViewStates.ResetScrollPositions();
         }
 
         /// <summary>
@@ -572,11 +605,41 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private VirtualizedStatisticsList GetActiveStatisticsList()
         {
-            return statisticsLists != null
-                && selectedTabIndex >= 0
-                && selectedTabIndex < statisticsLists.Length
-                    ? statisticsLists[selectedTabIndex]
-                    : null;
+            return statisticsLists != null && statisticsLists.TryGetValue(ActivePageKey, out var list) ? list : null;
+        }
+
+        private string ActivePageKey => selectedTabIndex == BlocksTabIndex
+            ? "Blocks/" + selectedBlockSubTab : TabLocalizationKeys[selectedTabIndex];
+
+        /// <summary>保存旧子页后切换独立列表，工具栏筛选和范围保持当前值。</summary>
+        private void SelectBlockSubTab(string id)
+        {
+            id = StatisticsSubTabs.Resolve("Blocks", id);
+            if (id == selectedBlockSubTab) return;
+            SaveActiveExpansionState();
+            SaveActiveListViewState();
+            blockList.Remove();
+            isBlockListAttached = false;
+            selectedBlockSubTab = id;
+            if (CanReadRuntimeStatistics)
+                Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().Data.SelectedSubTabs["Blocks"] = id;
+            SelectTab(BlocksTabIndex, playSound: false, saveCurrent: false);
+            SoundEngine.PlaySound(SoundID.MenuTick);
+        }
+
+        /// <summary>统一排列筛选、固定子页栏与列表；无子页的主页面不留下空行。</summary>
+        private void UpdateListLayout()
+        {
+            if (statisticsLists == null) return;
+            foreach (var pair in statisticsLists)
+            {
+                string main = pair.Key.Split('/')[0];
+                float top = ListTop;
+                if (subTabBars.TryGetValue(main, out var bar)) top = bar.Top.Pixels + bar.Height.Pixels + 6f;
+                pair.Value.Top.Set(top, 0f);
+                pair.Value.Height.Set(-top, 1f);
+            }
+            contentPanel.Recalculate();
         }
 
         /// <summary>
@@ -597,7 +660,7 @@ namespace ComprehensiveStatistics.Common.UI
 
             StatisticsViewScope scope = toolbar?.Scope ?? StatisticsViewScope.CharacterCareer;
             Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().SaveExpansionStates(
-                TabLocalizationKeys[selectedTabIndex],
+                ActivePageKey,
                 currentWorld: scope == StatisticsViewScope.CharacterCurrentWorld,
                 activeList.GetExpansionStates());
         }
@@ -609,7 +672,7 @@ namespace ComprehensiveStatistics.Common.UI
             VirtualizedStatisticsList list = GetActiveStatisticsList();
             if (list == null) return;
             Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().SaveListViewState(
-                TabLocalizationKeys[selectedTabIndex],
+                ActivePageKey,
                 toolbar.Scope == StatisticsViewScope.CharacterCurrentWorld, list.GetViewState());
         }
 
@@ -633,11 +696,11 @@ namespace ComprehensiveStatistics.Common.UI
             IReadOnlyDictionary<string, bool> savedStates = Main.LocalPlayer
                 .GetModPlayer<StatisticsPlayer>()
                 .GetSavedExpansionStates(
-                    TabLocalizationKeys[selectedTabIndex],
+                    ActivePageKey,
                     currentWorld: scope == StatisticsViewScope.CharacterCurrentWorld);
             activeList.RestoreExpansionStates(savedStates);
             activeList.RestoreViewState(Main.LocalPlayer.GetModPlayer<StatisticsPlayer>()
-                .GetSavedListViewState(TabLocalizationKeys[selectedTabIndex],
+                .GetSavedListViewState(ActivePageKey,
                     scope == StatisticsViewScope.CharacterCurrentWorld));
         }
 
@@ -778,7 +841,7 @@ namespace ComprehensiveStatistics.Common.UI
             }
 
             StatisticsData scopeData = GetCharacterScopeData(scope);
-            blockList.SetGroups(CreateBlockGroups(scopeData));
+            blockList.SetGroups(CreateBlockPageGroups(scopeData, selectedBlockSubTab));
         }
 
         /// <summary>
@@ -1978,6 +2041,24 @@ namespace ComprehensiveStatistics.Common.UI
             return contentComparison != 0
                 ? contentComparison
                 : StringComparer.Ordinal.Compare(left.ModName, right.ModName);
+        }
+
+        /// <summary>按稳定子页身份建立互相隔离的分组，沿用旧分组路径。</summary>
+        private static IEnumerable<StatisticsListGroup> CreateBlockPageGroups(StatisticsData data, string subTab)
+        {
+            if (subTab == "Liquids") return CreateLiquidGroups(data);
+            string root = StatisticsSubTabs.For("Blocks").First(p => p.Id == subTab).GroupKey;
+            return CreateBlockGroups(data).Where(group => group.StateKey == root);
+        }
+
+        /// <summary>将四种液体的原始体积投影到双列列表，不在展示时修改累计。</summary>
+        private static IEnumerable<StatisticsListGroup> CreateLiquidGroups(StatisticsData data)
+        {
+            return LiquidStatisticsList.CreateGroups(data, iconType =>
+            {
+                Main.instance?.LoadItem(iconType);
+                return TextureAssets.Item[iconType];
+            });
         }
 
         /// <summary>

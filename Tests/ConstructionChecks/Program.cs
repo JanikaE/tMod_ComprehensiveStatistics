@@ -86,6 +86,7 @@ internal static class Program
         ImproveGame.Helpers.MyUtils.TryPlaceTile(8,8,new Item(),Game.player[0],false,false); Expect("wall-place:2","place:9");
         M3Checks.Run();
         M4Checks.Run();
+        LiquidMultiplayerChecks.Run();
         system.Unload();
         Reset(); new CreateWand().Use(Game.player[0],false); Expect();
         ModLoader.Available=false; system.PostSetupContent();

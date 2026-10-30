@@ -53,6 +53,10 @@ namespace ImproveGame.Content.Items
     /// <summary>模拟实际选择器跨帧循环。</summary>
     internal class SelectorItem
     {
+        internal IEnumerator LiquidPending;
+        /// <summary>提供与真实包一致的框选调用边界，液体组在最后重建它。</summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void DoSelector(Player player) { LiquidPending=ModifyTiles(player,new Rectangle(4,4,1,1)); }
         /// <summary>逐格执行并在每格后让出。</summary>
         internal IEnumerator ModifyTiles(Player player,Rectangle rectangle)
         {
