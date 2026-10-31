@@ -54,7 +54,17 @@ internal static class Program
             foreach (var language in new[] { zh, en })
             {
                 Language.Values = language;
-                string text = ImproveGameCompatibilityText.Format(status);
+                string summary = ImproveGameCompatibilityText.Format(status, false);
+                Check(summary.Contains(language["UI.Compatibility.Title"])
+                    && summary.Contains(string.Format(CultureInfo.InvariantCulture, language["UI.Compatibility.States." + state], count)),
+                    "summary retains title and actual state");
+                Check(summary.Contains("[c/FFCC66:" + language["UI.Compatibility.HoldShiftForDetails"] + "]")
+                    && summary.Split('\n').Length == (status.Version == null ? 3 : 4), "compact summary with colored Shift hint");
+                Check(!summary.Contains(language["UI.Compatibility.ReplacementRule"]), "details hidden by default");
+                string text = ImproveGameCompatibilityText.Format(status, true);
+                Check(text.Contains(language["UI.Compatibility.ReplacementRule"])
+                    && text.Contains(language["UI.Compatibility.FurnitureLimit"])
+                    && !text.Contains(language["UI.Compatibility.HoldShiftForDetails"]), "full rules shown while Shift is held");
                 Check(!text.Contains("Mods.ComprehensiveStatistics") && !Regex.IsMatch(text, @"\{\d"), "resolved text and placeholders");
                 Check(text.Split('\n').All(line => line.Length <= 88), "compact tooltip lines");
                 if (state == ImproveGameCompatibilityState.WaitingForServer)

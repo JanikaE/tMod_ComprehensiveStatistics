@@ -8,6 +8,7 @@ using ComprehensiveStatistics.Common.Statistics;
 using ComprehensiveStatistics.Common.UI.Elements;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using ReLogic.Content;
 using Terraria;
 using Terraria.Audio;
@@ -24,11 +25,11 @@ using Terraria.UI;
 namespace ComprehensiveStatistics.Common.UI
 {
     /// <summary>
-    /// 统计主窗口，负责十个统计 Tab 的导航、响应式布局以及各页内容的装载。
+    /// 统计主窗口，负责九个统计 Tab 的导航、响应式布局以及各页内容的装载。
     /// </summary>
     internal sealed class StatisticsWindowState : UIState
     {
-        private const int TabCount = 10;
+        private const int TabCount = 9;
         private const float WindowMargin = 12f;
         private const float WindowPadding = 12f;
         private const float PreferredWindowWidth = 1100f;
@@ -45,9 +46,8 @@ namespace ComprehensiveStatistics.Common.UI
         private const int KillsTabIndex = 4;
         private const int EconomyTabIndex = 5;
         private const int FishingTabIndex = 6;
-        private const int BaitTabIndex = 7;
-        private const int MovementTabIndex = 8;
-        private const int SurvivalTabIndex = 9;
+        private const int MovementTabIndex = 7;
+        private const int SurvivalTabIndex = 8;
         private const float ToolbarTop = 38f;
         private const float ToolbarHeight = 28f;
         private const float ListTop = 74f;
@@ -65,7 +65,6 @@ namespace ComprehensiveStatistics.Common.UI
             "Kills",
             "Economy",
             "Fishing",
-            "Bait",
             "Movement",
             "Survival"
         };
@@ -90,7 +89,8 @@ namespace ComprehensiveStatistics.Common.UI
         private VirtualizedStatisticsList interactionList;
         private VirtualizedStatisticsList killList;
         private VirtualizedStatisticsList economyList;
-        private VirtualizedStatisticsList fishingList;
+        private string selectedFishingSubTab = "Catches";
+        private VirtualizedStatisticsList fishingList => statisticsLists["Fishing/" + selectedFishingSubTab];
         private VirtualizedStatisticsList baitList;
         private VirtualizedStatisticsList movementList;
         private VirtualizedStatisticsList survivalList;
@@ -143,6 +143,11 @@ namespace ComprehensiveStatistics.Common.UI
             var data = Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().Data;
             data.SelectedSubTabs.TryGetValue("Blocks", out string savedSubTab);
             selectedBlockSubTab = StatisticsSubTabs.Resolve("Blocks", savedSubTab);
+            foreach (var page in StatisticsSubTabs.For("Fishing")) statisticsLists[page.PageKey].Remove();
+            isFishingListAttached = false;
+            isBaitListAttached = false;
+            data.SelectedSubTabs.TryGetValue("Fishing", out string savedFishingSubTab);
+            selectedFishingSubTab = StatisticsSubTabs.Resolve("Fishing", savedFishingSubTab);
             toolbar.RefreshLocalizedText();
             UpdateWindowHeaderLayout();
             SelectTab(selectedTabIndex, playSound: false, saveCurrent: false);
@@ -290,13 +295,6 @@ namespace ComprehensiveStatistics.Common.UI
             economyList.Width.Set(0f, 1f);
             economyList.Height.Set(-ListTop, 1f);
 
-            fishingList = new VirtualizedStatisticsList(
-                CreateFishingGroups(data: null),
-                StatisticsMetricDisplay.FishingActivity);
-            fishingList.Top.Set(ListTop, 0f);
-            fishingList.Width.Set(0f, 1f);
-            fishingList.Height.Set(-ListTop, 1f);
-
             baitList = new VirtualizedStatisticsList(
                 CreateBaitGroups(data: null),
                 StatisticsMetricDisplay.AmmoActivity);
@@ -312,8 +310,7 @@ namespace ComprehensiveStatistics.Common.UI
                 ["Interactions"] = interactionList,
                 ["Kills"] = killList,
                 ["Economy"] = economyList,
-                ["Fishing"] = fishingList,
-                ["Bait"] = baitList,
+                ["Fishing/Bait"] = baitList,
                 ["Movement"] = movementList,
                 ["Survival"] = survivalList
             };
@@ -323,12 +320,16 @@ namespace ComprehensiveStatistics.Common.UI
                 if (pages.Count == 0) continue;
                 foreach (var page in pages)
                 {
-                    var list = new VirtualizedStatisticsList(CreateBlockPageGroups(null, page.Id),
-                        page.Id == "Liquids" ? StatisticsMetricDisplay.LiquidVolume : StatisticsMetricDisplay.WiringActivity);
+                    if (mainTab == "Fishing" && page.Id == "Bait") continue;
+                    var list = mainTab == "Fishing"
+                        ? new VirtualizedStatisticsList(page.Id == "Casts" ? FishingCastStatisticsList.CreateGroups(null) : CreateFishingGroups(null),
+                            page.Id == "Casts" ? StatisticsMetricDisplay.Events : StatisticsMetricDisplay.FishingActivity)
+                        : new VirtualizedStatisticsList(CreateBlockPageGroups(null, page.Id),
+                            page.Id == "Liquids" ? StatisticsMetricDisplay.LiquidVolume : StatisticsMetricDisplay.WiringActivity);
                     list.Width.Set(0f, 1f);
                     statisticsLists[page.PageKey] = list;
                 }
-                var bar = new StatisticsSubTabBar(pages, SelectBlockSubTab);
+                var bar = new StatisticsSubTabBar(pages, id => SelectSubTab(mainTab, id));
                 bar.Top.Set(ToolbarTop + ToolbarHeight + 6f, 0f);
                 bar.LayoutChanged += UpdateListLayout;
                 subTabBars[mainTab] = bar;
@@ -388,7 +389,8 @@ namespace ComprehensiveStatistics.Common.UI
             // 原版 InterfaceLogic3 会在 Update 之后清空 hoverItemName。窗口及其子元素
             // 绘制完成后使用专用提示接口，既避免被清空，也避免被后画的列表遮挡。
             if (selectedTabIndex == BlocksTabIndex && compatibilityInfoButton.IsMouseHovering)
-                UICommon.TooltipMouseText(ImproveGameCompatibilityText.Format(ImproveGameMultiplayerSystem.GetDisplayStatus()));
+                UICommon.TooltipMouseText(ImproveGameCompatibilityText.Format(ImproveGameMultiplayerSystem.GetDisplayStatus(),
+                    Main.keyState.IsKeyDown(Keys.LeftShift) || Main.keyState.IsKeyDown(Keys.RightShift)));
             else if (closeButton.IsMouseHovering)
                 UICommon.TooltipMouseText(Language.GetTextValue("Mods.ComprehensiveStatistics.UI.CloseButtonTooltip"));
             else if (GetActiveStatisticsList()?.HoveredMetricTooltip is string metricTooltip)
@@ -430,8 +432,8 @@ namespace ComprehensiveStatistics.Common.UI
             SetInteractionTotalsVisible(tabIndex == InteractionsTabIndex);
             SetKillTotalsVisible(tabIndex == KillsTabIndex);
             SetEconomyTotalsVisible(tabIndex == EconomyTabIndex);
-            SetFishingTotalsVisible(tabIndex == FishingTabIndex);
-            SetBaitTotalsVisible(tabIndex == BaitTabIndex);
+            SetFishingTotalsVisible(tabIndex == FishingTabIndex && selectedFishingSubTab != "Bait");
+            SetBaitTotalsVisible(tabIndex == FishingTabIndex && selectedFishingSubTab == "Bait");
             SetMovementTotalsVisible(tabIndex == MovementTabIndex);
             SetSurvivalTotalsVisible(tabIndex == SurvivalTabIndex);
             foreach (var pair in subTabBars)
@@ -439,7 +441,7 @@ namespace ComprehensiveStatistics.Common.UI
                 pair.Value.Remove();
                 if (pair.Key != TabLocalizationKeys[selectedTabIndex]) continue;
                 contentPanel.Append(pair.Value);
-                pair.Value.Select(selectedBlockSubTab);
+                pair.Value.Select(pair.Key == "Fishing" ? selectedFishingSubTab : selectedBlockSubTab);
                 pair.Value.Recalculate();
                 pair.Value.RefreshLayout();
             }
@@ -609,21 +611,31 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         private string ActivePageKey => selectedTabIndex == BlocksTabIndex
-            ? "Blocks/" + selectedBlockSubTab : TabLocalizationKeys[selectedTabIndex];
+            ? "Blocks/" + selectedBlockSubTab : selectedTabIndex == FishingTabIndex
+                ? "Fishing/" + selectedFishingSubTab : TabLocalizationKeys[selectedTabIndex];
 
         /// <summary>保存旧子页后切换独立列表，工具栏筛选和范围保持当前值。</summary>
-        private void SelectBlockSubTab(string id)
+        private void SelectSubTab(string mainTab, string id)
         {
-            id = StatisticsSubTabs.Resolve("Blocks", id);
-            if (id == selectedBlockSubTab) return;
+            id = StatisticsSubTabs.Resolve(mainTab, id);
+            if (id == (mainTab == "Fishing" ? selectedFishingSubTab : selectedBlockSubTab)) return;
             SaveActiveExpansionState();
             SaveActiveListViewState();
-            blockList.Remove();
-            isBlockListAttached = false;
-            selectedBlockSubTab = id;
+            GetActiveStatisticsList()?.Remove();
+            if (mainTab == "Fishing")
+            {
+                selectedFishingSubTab = id;
+                isFishingListAttached = false;
+                isBaitListAttached = false;
+            }
+            else
+            {
+                selectedBlockSubTab = id;
+                isBlockListAttached = false;
+            }
             if (CanReadRuntimeStatistics)
-                Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().Data.SelectedSubTabs["Blocks"] = id;
-            SelectTab(BlocksTabIndex, playSound: false, saveCurrent: false);
+                Main.LocalPlayer.GetModPlayer<StatisticsPlayer>().Data.SelectedSubTabs[mainTab] = id;
+            SelectTab(selectedTabIndex, playSound: false, saveCurrent: false);
             SoundEngine.PlaySound(SoundID.MenuTick);
         }
 
@@ -887,17 +899,18 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 从当前角色范围重新生成抛竿结果、渔获内容与液体类型明细。
+        /// 从当前角色范围重新生成当前渔获或按鱼竿分组的抛竿子页。
         /// </summary>
         private void UpdateFishingTotals(StatisticsViewScope scope)
         {
-            if (!CanReadRuntimeStatistics || selectedTabIndex != FishingTabIndex)
+            if (!CanReadRuntimeStatistics || selectedTabIndex != FishingTabIndex || selectedFishingSubTab == "Bait")
             {
                 return;
             }
 
             StatisticsData scopeData = GetCharacterScopeData(scope);
-            fishingList.SetGroups(CreateFishingGroups(scopeData));
+            fishingList.SetGroups(selectedFishingSubTab == "Casts"
+                ? FishingCastStatisticsList.CreateGroups(scopeData) : CreateFishingGroups(scopeData));
         }
 
         /// <summary>
@@ -905,7 +918,7 @@ namespace ComprehensiveStatistics.Common.UI
         /// </summary>
         private void UpdateBaitTotals(StatisticsViewScope scope)
         {
-            if (!CanReadRuntimeStatistics || selectedTabIndex != BaitTabIndex)
+            if (!CanReadRuntimeStatistics || (selectedTabIndex != FishingTabIndex || selectedFishingSubTab != "Bait"))
             {
                 return;
             }
@@ -3281,53 +3294,11 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 从一个统计范围创建抛竿与渔获树。
+        /// 从一个统计范围创建按来源液体分组的渔获树。
         /// </summary>
         private static IEnumerable<StatisticsListGroup> CreateFishingGroups(StatisticsData data)
         {
-            long successfulCasts = data?
-                .GetValue(StatisticKeys.FishingSuccessfulCasts).Events ?? 0L;
-            long emptyReels = data?
-                .GetValue(StatisticKeys.FishingEmptyReels).Events ?? 0L;
-            long interruptedCasts = data?
-                .GetValue(StatisticKeys.FishingInterruptedCasts).Events ?? 0L;
-            List<StatisticsListGroup> groups = new List<StatisticsListGroup>
-            {
-                new StatisticsListGroup(
-                    "Mods.ComprehensiveStatistics.UI.Fishing.CastsGroup",
-                    new[]
-                    {
-                        new StatisticsListItem(
-                            "Mods.ComprehensiveStatistics.UI.Fishing.SuccessfulCatches",
-                            itemType: 0,
-                            icon: null,
-                            events: successfulCasts,
-                            units: 0L,
-                            source: StatisticsContentSource.Neutral,
-                            nameIsLocalizationKey: true,
-                            iconKind: StatisticsIconKind.None),
-                        new StatisticsListItem(
-                            "Mods.ComprehensiveStatistics.UI.Fishing.EmptyReels",
-                            itemType: 0,
-                            icon: null,
-                            events: emptyReels,
-                            units: 0L,
-                            source: StatisticsContentSource.Neutral,
-                            nameIsLocalizationKey: true,
-                            iconKind: StatisticsIconKind.None),
-                        new StatisticsListItem(
-                            "Mods.ComprehensiveStatistics.UI.Fishing.InterruptedCasts",
-                            itemType: 0,
-                            icon: null,
-                            events: interruptedCasts,
-                            units: 0L,
-                            source: StatisticsContentSource.Neutral,
-                            nameIsLocalizationKey: true,
-                            iconKind: StatisticsIconKind.None)
-                    },
-                    nameIsLocalizationKey: true,
-                    metricDisplay: StatisticsMetricDisplay.FishingEvents)
-            };
+            var groups = new List<StatisticsListGroup>();
 
             foreach (FishingLiquidKind liquid in Enum.GetValues(typeof(FishingLiquidKind)))
             {

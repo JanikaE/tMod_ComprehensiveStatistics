@@ -16,12 +16,18 @@ namespace ComprehensiveStatistics.Common.UI
             ImproveGameCapability.Robot, ImproveGameCapability.Vein, ImproveGameCapability.Liquid
         };
 
-        /// <summary>按当前语言生成短行提示；状态每次悬停重新取得，握手完成后无需重开窗口。</summary>
-        internal static string Format(ImproveGameCompatibilityStatus status)
+        /// <summary>按当前语言与 Shift 状态生成简短或完整提示；状态每帧重新取得，无需重开窗口。</summary>
+        internal static string Format(ImproveGameCompatibilityStatus status, bool showDetails)
         {
             var lines = new List<string> { Text("Title") };
             if (status.Version != null) lines.Add(Text("Version", status.Version));
             lines.Add(Text("States." + status.State, status.EnabledCount));
+            if (!showDetails)
+            {
+                lines.Add("[c/FFCC66:" + Text("HoldShiftForDetails") + "]");
+                return string.Join("\n", lines);
+            }
+
             if (status.State != ImproveGameCompatibilityState.NotInstalled && status.State != ImproveGameCompatibilityState.UnsupportedVersion)
             {
                 foreach (var capability in Tools)

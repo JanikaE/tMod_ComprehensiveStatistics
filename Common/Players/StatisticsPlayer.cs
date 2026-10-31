@@ -84,6 +84,7 @@ namespace ComprehensiveStatistics.Common.Players
         private ulong activeFishingCastSpawnUpdate;
         private bool activeFishingCastSucceeded;
         private bool activeFishingCastWasReeled;
+        private StableContentKey? activeFishingRodContent;
         private StableContentKey? activeFishingBaitContent;
         private bool activeFishingBaitDecisionObserved;
         private long activeFishingBaitExpectedConsumption;
@@ -340,6 +341,8 @@ namespace ComprehensiveStatistics.Common.Players
                 activeFishingCastSpawnUpdate = currentUpdate;
                 activeFishingCastSucceeded = false;
                 activeFishingCastWasReeled = false;
+                activeFishingRodContent = StableContentKey.TryCreateForItem(fishingRod.type, out var rodContent)
+                    ? rodContent : null;
                 BeginFishingBaitSession();
                 nextFishingReconciliationUpdate =
                     currentUpdate + FishingReconciliationIntervalTicks;
@@ -1200,8 +1203,12 @@ namespace ComprehensiveStatistics.Common.Players
                     ? StatisticKeys.FishingEmptyReels
                     : StatisticKeys.FishingInterruptedCasts;
             Record(resultKey, new StatisticMetrics(events: 1L));
+            // 固定抛竿时的来源，切换手持物品和多浮标结束顺序均不改变归属。
+            if (activeFishingRodContent.HasValue)
+                Record(new StatisticKey(resultKey.StatisticId, activeFishingRodContent.Value), new StatisticMetrics(events: 1L));
             RecordActiveFishingBaitUsage();
 
+            activeFishingRodContent = null;
             hasActiveFishingCast = false;
             activeFishingCastSpawnUpdate = 0UL;
             activeFishingCastSucceeded = false;
@@ -1220,6 +1227,7 @@ namespace ComprehensiveStatistics.Common.Players
             hasPendingCaughtItem = false;
             pendingCaughtItemLiquid = default;
             isFishingCastAwaitingBobber = false;
+            activeFishingRodContent = null;
             hasActiveFishingCast = false;
             activeFishingCastSpawnUpdate = 0UL;
             activeFishingCastSucceeded = false;

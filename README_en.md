@@ -13,7 +13,7 @@ A searchable, filterable, sortable Terraria statistics window for your character
 ## Features and usage
 
 - **Blocks**: placement and removal of blocks, walls, furniture, circuits and liquids, organized into Blocks, Walls, Circuits and Liquids subtabs.
-- **Other statistics**: items, ammunition, interactions, kills, economy, fishing, bait, movement, deaths and life lost.
+- **Other statistics**: items, ammunition, interactions, kills, economy, fishing (catches, cast outcomes by rod, and bait), movement, deaths and life lost.
 - Open with the inventory statistics button or a custom hotkey, then search, filter or sort. Each page saves its own view state.
 - Supports ImproveGame construction tools. Hover over `?` beside the Blocks title to see the current session's available capabilities.
 - Records activity only after the mod is enabled. Historical recovery, reset, import/export and cross-character merging are unavailable.

@@ -10,8 +10,7 @@ Open the statistics window with the inventory button or a custom hotkey to view 
 [*][b]Interactions:[/b] NPC dialogue, facilities and mechanisms
 [*][b]Kills:[/b] final kills, assists and current-world NPC deaths
 [*][b]Economy:[/b] trading, nurse healing, reforging, coins and special currencies
-[*][b]Fishing:[/b] casts, catches, empty casts and interruptions
-[*][b]Bait:[/b] expected consumption, actual consumption and consumption rate
+[*][b]Fishing:[/b] three subtabs for catches by liquid, cast outcomes by rod, and bait consumption with expected/actual amounts and consumption rate
 [*][b]Movement:[/b] distance by movement method and source
 [*][b]Survival:[/b] deaths and actual life lost, grouped by source
 [/list]

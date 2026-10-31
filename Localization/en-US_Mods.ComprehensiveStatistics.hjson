@@ -13,6 +13,7 @@ UI: {
 
 	Compatibility: {
 		Title: ImproveGame tool statistics
+		HoldShiftForDetails: "[Hold Shift for more information]"
 		Version: Loaded version: {0}
 		ToolLine: "{0}: {1}"
 		ReplacementRule: Replacements add both removal and placement.
@@ -235,6 +236,7 @@ UI: {
 	}
 
 	Fishing: {
+		UnknownRod: Historical or unidentified rod
 		CastsGroup: Casts
 		EventsColumn: Events
 		UnitsColumn: Units
@@ -275,6 +277,12 @@ UI: {
 	}
 
 	SubTabs: {
+		Fishing: {
+			Catches: Catches
+			Casts: Casts
+			Bait: Bait
+		}
+
 		Blocks: {
 			Tiles: Blocks
 			Walls: Walls
@@ -316,7 +324,7 @@ UI: {
 
 		Fishing: {
 			Title: Fishing
-			Description: Casts, catches, interruptions, and catch details.
+			Description: View catches, cast outcomes by rod, and bait consumption.
 		}
 
 		Bait: {

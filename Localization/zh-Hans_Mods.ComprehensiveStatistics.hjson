@@ -13,6 +13,7 @@ UI: {
 
 	Compatibility: {
 		Title: 更好的体验：工具统计
+		HoldShiftForDetails: "[按住 Shift 键以了解更多信息]"
 		Version: 已加载版本：{0}
 		ToolLine: "{0}：{1}"
 		ReplacementRule: 成功替换分别增加旧内容拆除与新内容放置。
@@ -235,6 +236,7 @@ UI: {
 	}
 
 	Fishing: {
+		UnknownRod: 历史或未识别鱼竿
 		CastsGroup: 抛竿次数
 		EventsColumn: 次数
 		UnitsColumn: 数量
@@ -275,6 +277,12 @@ UI: {
 	}
 
 	SubTabs: {
+		Fishing: {
+			Catches: 渔获
+			Casts: 抛竿
+			Bait: 鱼饵
+		}
+
 		Blocks: {
 			Tiles: 物块
 			Walls: 背景墙
@@ -316,7 +324,7 @@ UI: {
 
 		Fishing: {
 			Title: 钓鱼
-			Description: 抛竿、成功钓获、中断和渔获明细。
+			Description: 分子页查看渔获、各鱼竿抛竿结果和鱼饵消耗。
 		}
 
 		Bait: {

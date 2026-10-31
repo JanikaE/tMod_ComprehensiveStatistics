@@ -23,10 +23,82 @@ internal static class SubTabChecks
         var definition = assembly.GetType("ComprehensiveStatistics.Common.Statistics.StatisticsSubTabs");
         Check((string)definition.GetMethod("Resolve", Flags).Invoke(null, new object[]{"Blocks", "invalid"}) == "Tiles", "unknown subpage defaults");
         Check(((IEnumerable)definition.GetMethod("For", Flags).Invoke(null, new object[]{"Items"})).Cast<object>().Count() == 0, "ordinary page has no subtab strip");
+        FishingChecks(assembly);
         DisplayChecks(assembly);
         ProjectionChecks(assembly);
         LayoutChecks(assembly);
         Console.WriteLine($"SUBTAB_CHECKS_OK: {checks} assertions; legacy 1/2/3/4 migration, independent pages/worlds, selected page, compressed reload, exact liquid display and wrapped button layout");
+    }
+
+    /// <summary>验证钓鱼子页身份、旧鱼饵完整迁移、旧液体折叠及鱼竿结果筛选合计。</summary>
+    private static void FishingChecks(Assembly assembly)
+    {
+        var definition = assembly.GetType("ComprehensiveStatistics.Common.Statistics.StatisticsSubTabs");
+        var pages = ((IEnumerable)definition.GetMethod("For", Flags).Invoke(null, new object[]{"Fishing"})).Cast<object>().ToArray();
+        Check(pages.Select(p => (string)Get(p,"Id")).SequenceEqual(new[]{"Catches","Casts","Bait"}), "fishing subpage order");
+        Check((string)definition.GetMethod("Resolve",Flags).Invoke(null,new object[]{"Fishing","unknown"}) == "Catches", "fishing default is catches");
+        string world = Guid.NewGuid().ToString("N");
+        var root = new TagCompound{["FormatVersion"]=4,["Career"]=Scope(4),["WorldSlices"]=new List<TagCompound>(),
+            ["ListViewStates"]=new List<TagCompound>(),["ExpansionStates"]=new List<TagCompound>(),
+            ["SelectedSubTabs"]=new List<TagCompound>{new(){["Tab"]="Fishing",["SubTab"]="Casts"}}};
+        foreach (string context in new[]{null,world})
+        {
+            root.GetList<TagCompound>("ListViewStates").Add(View("Fishing","Units","Descending",123f,context));
+            root.GetList<TagCompound>("ListViewStates").Add(View("Bait","Rate","Ascending",67f,context));
+            root.GetList<TagCompound>("ExpansionStates").Add(Fold("Fishing","\u001fMods.ComprehensiveStatistics.UI.Fishing.Liquids.Water",false,context));
+            root.GetList<TagCompound>("ExpansionStates").Add(Fold("Fishing","\u001fMods.ComprehensiveStatistics.UI.Fishing.CastsGroup",false,context));
+            root.GetList<TagCompound>("ExpansionStates").Add(Fold("Bait","\u001fMods.ComprehensiveStatistics.UI.Bait.UsageGroup",false,context));
+        }
+        var saved = Save(Read(root));
+        foreach (string context in new[]{null,world})
+        {
+            Check(saved.GetList<TagCompound>("ListViewStates").Single(t=>Match(t,"Fishing/Bait",context)).GetFloat("ScrollPosition")==67f,"bait scroll migrated in each scope");
+            Check(saved.GetList<TagCompound>("ListViewStates").Single(t=>Match(t,"Fishing/Catches",context)).GetFloat("ScrollPosition")==0f,"catch scroll reset after split");
+            Check(saved.GetList<TagCompound>("ExpansionStates").Count(t=>Match(t,"Fishing/Catches",context))==1,"only liquid folds move into catches");
+            Check(saved.GetList<TagCompound>("ExpansionStates").Count(t=>Match(t,"Fishing/Bait",context))==1,"bait fold moves intact");
+        }
+        saved.GetList<TagCompound>("ListViewStates").Single(t=>Match(t,"Fishing/Bait",null))["ScrollPosition"]=91f;
+        saved = Save(Read(Compressed(saved)));
+        Check(saved.GetList<TagCompound>("ListViewStates").Single(t=>Match(t,"Fishing/Bait",null)).GetFloat("ScrollPosition")==91f,"existing fishing page wins over legacy state");
+        Check(saved.GetList<TagCompound>("SelectedSubTabs").Single().GetString("SubTab")=="Casts","fishing selection survives compressed reload");
+        var scope = root.GetCompound("Career");
+        string[] ids={"fishing/results/successful","fishing/results/empty-reels","fishing/results/interrupted"};
+        foreach (var id in ids)
+        {
+            scope.GetList<TagCompound>("Entries").Add(new(){["StatisticId"]=id,["Events"]=10L});
+            scope.GetList<TagCompound>("Entries").Add(new(){["StatisticId"]=id,["ContentMod"]="Terraria",["ContentName"]="WoodFishingPole",["Events"]=2L});
+            scope.GetList<TagCompound>("Entries").Add(new(){["StatisticId"]=id,["ContentMod"]="MissingMod",["ContentName"]="Rod",["Events"]=3L});
+        }
+        object model=Read(root); object data=Get(model,"Career");
+        var method=assembly.GetType("ComprehensiveStatistics.Common.UI.Elements.FishingCastStatisticsList").GetMethod("CreateGroups",Flags);
+        var resolverType=method.GetParameters()[1].ParameterType;
+        var tupleType=resolverType.GetMethod("Invoke").ReturnType;
+        var parameter=System.Linq.Expressions.Expression.Parameter(resolverType.GenericTypeArguments[0]);
+        var tuple=System.Linq.Expressions.Expression.New(tupleType.GetConstructors().Single(),
+            System.Linq.Expressions.Expression.Constant("Test rod"),System.Linq.Expressions.Expression.Constant(0),
+            System.Linq.Expressions.Expression.Constant(null,tupleType.GenericTypeArguments[2]));
+        var resolver=System.Linq.Expressions.Expression.Lambda(resolverType,tuple,parameter).Compile();
+        object[] groups=((IEnumerable)method.Invoke(null,new[]{data,resolver})).Cast<object>().ToArray();
+        Check(groups.Length==3 && groups.Sum(g=>(long)Get(g,"TotalEvents"))==30L,"known rods plus history total without double count");
+        Check(groups.All(g=>((IEnumerable)Get(g,"Items")).Cast<object>().Count()==3),"three outcome leaves per rod");
+        Check((long)Get(groups.Single(g=>(string)Get(g,"StateKey")=="fishing/rod/unknown"),"TotalEvents")==15L,"unknown history is aggregate minus rod details");
+        var listType=assembly.GetType("ComprehensiveStatistics.Common.UI.Elements.VirtualizedStatisticsList");
+        object list=RuntimeHelpers.GetUninitializedObject(listType);
+        listType.GetField("searchQuery",Flags).SetValue(list,string.Empty);
+        var sourceField=listType.GetField("sourceFilter",Flags);
+        sourceField.SetValue(list,Enum.Parse(sourceField.FieldType,"Modded"));
+        var filtered=groups.Select(g=>listType.GetMethod("BuildFilteredGroup",Flags).Invoke(list,new[]{g,(object)false})).Where(g=>g!=null).ToArray();
+        Check(filtered.Sum(g=>(long)Get(g,"TotalEvents"))==24L,"modded filter follows rod source while history remains neutral");
+        sourceField.SetValue(list,Enum.Parse(sourceField.FieldType,"Vanilla"));
+        filtered=groups.Select(g=>listType.GetMethod("BuildFilteredGroup",Flags).Invoke(list,new[]{g,(object)false})).Where(g=>g!=null).ToArray();
+        Check(filtered.Sum(g=>(long)Get(g,"TotalEvents"))==21L,"vanilla filter follows rod source while history remains neutral");
+        sourceField.SetValue(list,Enum.Parse(sourceField.FieldType,"All"));
+        listType.GetField("searchQuery",Flags).SetValue(list,"Test rod");
+        filtered=groups.Select(g=>listType.GetMethod("BuildFilteredGroup",Flags).Invoke(list,new[]{g,(object)false})).Where(g=>g!=null).ToArray();
+        Check(filtered.Sum(g=>(long)Get(g,"TotalEvents"))==15L,"rod name search includes its outcome leaves");
+        var loaded=Save(Read(Compressed(Save(model))));
+        Check(loaded.GetCompound("Career").GetList<TagCompound>("Entries").Count==9,"rod details persist beside old aggregate keys");
+        Check(!((IEnumerable)method.Invoke(null,new object[]{null,resolver})).Cast<object>().Any(),"empty fishing data creates no rod rows");
     }
 
     /// <summary>直接执行生产液体投影及过滤，确认四类型顺序、双列原始合计和来源语义。</summary>
