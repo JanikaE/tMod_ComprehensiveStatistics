@@ -5,7 +5,7 @@ Open the statistics window with the inventory button or a custom hotkey to view 
 [h2]Statistics[/h2]
 [list]
 [*][b]Blocks:[/b] placement and removal of blocks, walls, furniture, circuits and liquids, organized into four subtabs
-[*][b]Items:[/b] pickups, use and drops
+[*][b]Items:[/b] pickups, crafting (standard interface and full Magic Storage chains), use and drops
 [*][b]Ammunition:[/b] expected consumption, actual consumption and consumption rate
 [*][b]Interactions:[/b] NPC dialogue, facilities and mechanisms
 [*][b]Kills:[/b] final kills, assists and current-world NPC deaths
@@ -19,9 +19,10 @@ Open the statistics window with the inventory button or a custom hotkey to view 
 [list]
 [*]Search, filter vanilla/modded content, sort columns and fold groups, with separate page views saved per character and world
 [*]Supports single-player, host-and-play and dedicated servers, with English and Chinese interfaces
-[*]Optionally supports ImproveGame 1.8.2 and later; hover over ? on Blocks for available tools. Both sides must update this mod for multiplayer
+[*]Optionally supports ImproveGame 1.8.2 or later; hover over ? on Blocks for available tools. Both sides must update this mod for multiplayer
+[*]Optionally supports Magic Storage 0.7.0.11 or later; hover over ? on Items for capabilities and negotiated support; both sides must update this mod
 [*]Records activity only after the mod is enabled; reset, import/export and cross-character merging are unavailable
 [/list]
 
-[h2]1.2.0 update[/h2]
-Adds liquid statistics under Blocks and organizes the page into Blocks, Walls, Circuits and Liquids subtabs.
+[h2]1.3.0 update[/h2]
+Adds crafted quantities to Items, including full recursive Magic Storage chains and multiplayer confirmation.

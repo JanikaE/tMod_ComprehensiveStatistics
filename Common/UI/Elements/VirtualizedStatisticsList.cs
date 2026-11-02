@@ -49,7 +49,9 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private float lastObservedScrollPosition;
 
         internal event Action ViewStateCommitted;
-        internal string HoveredMetricTooltip => rowPool.Select(row => row.HoveredMetricTooltip).FirstOrDefault(text => text != null);
+        internal string HoveredMetricTooltip => columnHeaders.Any(header => header.Column == StatisticsListSortColumn.CraftedUnits && header.IsMouseHovering)
+            ? Language.GetTextValue("Mods.ComprehensiveStatistics.UI.Items.CraftedUnitsTooltip")
+            : rowPool.Select(row => row.HoveredMetricTooltip).FirstOrDefault(text => text != null);
 
         internal event Action ExpansionStateChanged;
 
@@ -340,6 +342,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                         entry.TotalAmount,
                         entry.TotalRateUnits,
                         entry.TotalRateAmount,
+                        entry.TotalCraftedUnits,
                         group.IconType,
                         group.Icon,
                         group.IconKind,
@@ -531,7 +534,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     filteredChild.TotalUnits,
                     filteredChild.TotalAmount,
                     filteredChild.TotalRateUnits,
-                    filteredChild.TotalRateAmount);
+                    filteredChild.TotalRateAmount,
+                    filteredChild.TotalCraftedUnits);
             }
 
             foreach (StatisticsListItem item in group.Items)
@@ -547,7 +551,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     item.Units,
                     item.Amount,
                     item.RateUnits,
-                    item.RateAmount);
+                    item.RateAmount,
+                    item.CraftedUnits);
             }
 
             if (sortDirection == StatisticsListSortDirection.None
@@ -584,6 +589,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 filteredGroup.TotalAmount,
                 filteredGroup.TotalRateUnits,
                 filteredGroup.TotalRateAmount,
+                filteredGroup.TotalCraftedUnits,
                 depth,
                 resolvedMetricDisplay,
                 filteredGroup.Group.ShowChildren
@@ -638,7 +644,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             // 零值在所有统计页固定隐藏，避免工具栏状态与稀疏存档语义产生歧义。
             if (item.Events == 0L
                 && item.Units == 0L
-                && item.Amount == 0L)
+                && item.Amount == 0L
+                && item.CraftedUnits == 0L)
             {
                 return false;
             }
@@ -696,6 +703,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         /// </summary>
         private int CompareSiblingEntries(SiblingEntry left, SiblingEntry right)
         {
+            if (sortColumn == StatisticsListSortColumn.CraftedUnits)
+            {
+                int comparison = left.CraftedUnits.CompareTo(right.CraftedUnits);
+                if (sortDirection == StatisticsListSortDirection.Descending) comparison = -comparison;
+                return comparison != 0 ? comparison : string.Compare(left.Name, right.Name, StringComparison.CurrentCulture);
+            }
             return CompareRows(
                 left.Name,
                 left.Events,
@@ -812,7 +825,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 StatisticsMetricDisplay.Mixed => 254f,
                 StatisticsMetricDisplay.WiringActivity => 254f,
                 StatisticsMetricDisplay.LiquidVolume => 254f,
-                StatisticsMetricDisplay.ItemActivity => 370f,
+                StatisticsMetricDisplay.ItemActivity => 486f,
                 StatisticsMetricDisplay.AmmoActivity => 370f,
                 StatisticsMetricDisplay.FishingActivity => 254f,
                 StatisticsMetricDisplay.FishingEvents => 254f,
@@ -875,6 +888,13 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 AddColumnHeader(
                     "Mods.ComprehensiveStatistics.UI.Items.PickupUnitsColumn",
                     StatisticsListSortColumn.Units,
+                    leftPixels: -486f,
+                    widthPixels: 116f,
+                    widthPercent: 0f,
+                    leftPercent: 1f);
+                AddColumnHeader(
+                    "Mods.ComprehensiveStatistics.UI.Items.CraftedUnitsColumn",
+                    StatisticsListSortColumn.CraftedUnits,
                     leftPixels: -370f,
                     widthPixels: 116f,
                     widthPercent: 0f,
@@ -1202,6 +1222,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             internal long Amount => Group?.TotalAmount ?? Item.Amount;
 
+            internal long CraftedUnits => Group?.TotalCraftedUnits ?? Item.CraftedUnits;
+
             internal long RateUnits => Group?.TotalRateUnits ?? Item.RateUnits;
 
             internal long RateAmount => Group?.TotalRateAmount ?? Item.RateAmount;
@@ -1324,6 +1346,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
 
             internal long TotalAmount { get; private set; }
 
+            internal long TotalCraftedUnits { get; private set; }
+
             internal long TotalRateUnits { get; private set; }
 
             internal long TotalRateAmount { get; private set; }
@@ -1336,13 +1360,15 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 long units,
                 long amount,
                 long rateUnits,
-                long rateAmount)
+                long rateAmount,
+                long craftedUnits)
             {
                 TotalEvents = SaturatingAdd(TotalEvents, events);
                 TotalUnits = SaturatingAdd(TotalUnits, units);
                 TotalAmount = SaturatingAdd(TotalAmount, amount);
                 TotalRateUnits = SaturatingAdd(TotalRateUnits, rateUnits);
                 TotalRateAmount = SaturatingAdd(TotalRateAmount, rateAmount);
+                TotalCraftedUnits = SaturatingAdd(TotalCraftedUnits, craftedUnits);
             }
         }
 
@@ -1363,6 +1389,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 long totalAmount,
                 long totalRateUnits,
                 long totalRateAmount,
+                long totalCraftedUnits,
                 int depth,
                 StatisticsMetricDisplay metricDisplay,
                 Action toggleAction)
@@ -1374,6 +1401,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 TotalAmount = totalAmount;
                 TotalRateUnits = totalRateUnits;
                 TotalRateAmount = totalRateAmount;
+                TotalCraftedUnits = totalCraftedUnits;
                 Depth = depth;
                 MetricDisplay = metricDisplay;
                 ToggleAction = toggleAction;
@@ -1388,6 +1416,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             internal long TotalUnits { get; }
 
             internal long TotalAmount { get; }
+
+            internal long TotalCraftedUnits { get; }
 
             internal long TotalRateUnits { get; }
 
@@ -1411,6 +1441,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 long totalAmount,
                 long totalRateUnits,
                 long totalRateAmount,
+                long totalCraftedUnits,
                 int depth,
                 StatisticsMetricDisplay metricDisplay,
                 Action toggleAction)
@@ -1423,6 +1454,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     totalAmount,
                     totalRateUnits,
                     totalRateAmount,
+                    totalCraftedUnits,
                     depth,
                     metricDisplay,
                     toggleAction);
@@ -1444,6 +1476,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                     0L,
                     item.RateUnits,
                     item.RateAmount,
+                    item.CraftedUnits,
                     depth,
                     metricDisplay,
                     toggleAction: null);

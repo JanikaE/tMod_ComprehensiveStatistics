@@ -8,6 +8,30 @@ UI: {
 		按住右键可拖动此按钮
 		'''
 	CloseButtonTooltip: 关闭
+
+	CraftingCompatibility: {
+		Title: 魔法存储：合成统计
+		Version: 已加载版本：{0}
+		NotInstalled: 魔法存储未加载。
+		Unsupported: 需要魔法存储 0.7.0.11 或更高版本。
+		Unavailable: 当前合成兼容入口不可用。
+		SinglePlayer: 单人：按成功生产数量统计。
+		Waiting: 多人：正在确认服务器支持情况……
+		ServerUnavailable: 多人：服务器尚未确认支持，存储合成计数未启用。
+		NoCommon: 多人：双方没有共同可用的合成统计能力。
+		Ready: 多人：已启用服务器成功确认。
+		Normal: 普通与批量合成：{0}
+		Recursive: 递归全链合成：{0}
+		Enabled: 已启用
+		Disabled: 未启用
+		Pending: 等待服务器
+		HoldShift: 按住 Shift 键以了解更多信息
+		ChainRule: 递归包含整条链新生产的中间产物；已有库存不重复计产。
+		MultiplayerRule: 多人双方需要更新本模组；只有服务器确认成功的合成才会累计。
+		HistoryRule: 预览、失败及回退不计；超时或断线未确认的合成不补记，已有记录保留。
+		PendingCount: 等待确认的合成：{0}
+	}
+
 	StatisticsStartedAt: 统计开始时间：{0:g}
 	StatisticsStartUnavailable: 尚未进入世界，无可用的统计开始时间。
 
@@ -155,6 +179,8 @@ UI: {
 	Items: {
 		CombinedGroup: 物品统计
 		PickupUnitsColumn: 拾取数量
+		CraftedUnitsColumn: 合成数量
+		CraftedUnitsTooltip: 成功合成得到的物品数量；一次产出多个时按实际数量累计。
 		UseEventsColumn: 使用次数
 		DiscardUnitsColumn: 丢弃数量
 		AmmoExpectedUnitsColumn: 应耗数量

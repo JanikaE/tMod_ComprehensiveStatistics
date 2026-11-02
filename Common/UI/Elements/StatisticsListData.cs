@@ -16,7 +16,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         Events,
         Units,
         Amount,
-        Rate
+        Rate,
+        CraftedUnits
     }
 
     /// <summary>
@@ -135,7 +136,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             Asset<Texture2D> amountIcon = null,
             StatisticsTileIconLayout tileIconLayout = null,
             long? rateUnits = null,
-            long? rateAmount = null)
+            long? rateAmount = null,
+            long craftedUnits = 0L)
         {
             if (nameIsLocalizationKey)
             {
@@ -153,6 +155,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             Events = events;
             Units = units;
             Amount = amount;
+            CraftedUnits = craftedUnits;
             Source = source;
             Content = content;
             VanillaContentId = vanillaContentId;
@@ -178,6 +181,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal long Units { get; }
 
         internal long Amount { get; }
+
+        internal long CraftedUnits { get; }
 
         // 比率可使用独立的累计分母与分子。弹药页用此排除非消耗型
         // 弹药的比率计算，同时仍在“应耗数量”列保留其使用次数。
@@ -274,6 +279,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 TotalAmount = SaturatingAdd(TotalAmount, item.Amount);
                 TotalRateUnits = SaturatingAdd(TotalRateUnits, item.RateUnits);
                 TotalRateAmount = SaturatingAdd(TotalRateAmount, item.RateAmount);
+                TotalCraftedUnits = SaturatingAdd(TotalCraftedUnits, item.CraftedUnits);
             }
 
             foreach (StatisticsListGroup childGroup in ChildGroups)
@@ -283,6 +289,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 TotalAmount = SaturatingAdd(TotalAmount, childGroup.TotalAmount);
                 TotalRateUnits = SaturatingAdd(TotalRateUnits, childGroup.TotalRateUnits);
                 TotalRateAmount = SaturatingAdd(TotalRateAmount, childGroup.TotalRateAmount);
+                TotalCraftedUnits = SaturatingAdd(TotalCraftedUnits, childGroup.TotalCraftedUnits);
             }
         }
 
@@ -307,6 +314,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         internal long TotalUnits { get; private set; }
 
         internal long TotalAmount { get; private set; }
+
+        internal long TotalCraftedUnits { get; private set; }
 
         internal long TotalRateUnits { get; private set; }
 

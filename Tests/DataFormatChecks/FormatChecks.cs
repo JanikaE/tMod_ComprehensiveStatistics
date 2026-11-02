@@ -77,6 +77,7 @@ internal static class FormatChecks
         PersistenceChecks.Run(assembly);
         LiquidDataChecks.Run(assembly);
         SubTabChecks.Run(assembly);
+        CraftingChecks.Run(assembly);
     }
 }
 

@@ -185,9 +185,14 @@ namespace ComprehensiveStatistics.Common.Players
             trackedTalkingNpcIndex = -1;
             ResetFishingTracking();
             ImproveGameMultiplayerSystem.EnterWorld();
+            MagicStorageCraftingSystem.EnterClientWorld();
         }
 
-        public override void PlayerDisconnect() => ImproveGameMultiplayerSystem.Disconnect(Player.whoAmI);
+        public override void PlayerDisconnect()
+        {
+            ImproveGameMultiplayerSystem.Disconnect(Player.whoAmI);
+            MagicStorageCraftingSystem.Disconnect(Player.whoAmI);
+        }
 
         public override void SaveData(TagCompound tag)
         {
@@ -895,6 +900,15 @@ namespace ComprehensiveStatistics.Common.Players
                 item.type,
                 item.stack,
                 content));
+        }
+
+        /// <summary>为本地角色累计已成功合成的产物数量，同时写入生涯和当前世界。</summary>
+        internal void RecordItemCraft(int itemType, long units)
+        {
+            if (!IsOwnedByLocalClient || units <= 0L
+                || !StableContentKey.TryCreateForItem(itemType, out StableContentKey content)) return;
+            RecordHighFrequency(new StatisticKey(StatisticKeys.ItemCraftStatisticId, content),
+                new StatisticMetrics(units: units));
         }
 
         /// <summary>

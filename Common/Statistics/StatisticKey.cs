@@ -102,6 +102,7 @@ namespace ComprehensiveStatistics.Common.Statistics
     /// </summary>
     internal static class StatisticKeys
     {
+        internal const string ItemCraftStatisticId = "items/crafts";
         internal const string ItemPickupStatisticId = "items/pickups";
         internal const string TilePlacedStatisticId = "blocks/tiles-placed";
         internal const string TileMinedStatisticId = "blocks/tiles-mined";

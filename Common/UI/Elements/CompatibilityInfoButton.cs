@@ -3,7 +3,7 @@ using Terraria.GameContent.UI.Elements;
 
 namespace ComprehensiveStatistics.Common.UI.Elements
 {
-    /// <summary>物块页标题旁的紧凑说明入口；只构造视觉元素，运行时提示由窗口管理。</summary>
+    /// <summary>物块与物品页标题旁的紧凑说明入口；只构造视觉元素，运行时提示由窗口管理。</summary>
     internal sealed class CompatibilityInfoButton : UIPanel
     {
         /// <summary>使用通用问号避免中英文标题挤占说明入口，完整名称在悬停提示中显示。</summary>

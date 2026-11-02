@@ -39,7 +39,13 @@ namespace ComprehensiveStatistics.Common.Networking
         ImproveGameClientTargets = 13,
         ImproveGameClientCommit = 14,
         NativeLiquidBegin = 15,
-        NativeLiquidCommit = 16
+        NativeLiquidCommit = 16,
+        MagicStorageHello = 17,
+        MagicStorageWelcome = 18,
+        MagicStorageReady = 19,
+        MagicStorageBegin = 20,
+        MagicStorageAck = 21,
+        MagicStorageAbort = 22
     }
 
     /// <summary>
@@ -195,6 +201,11 @@ namespace ComprehensiveStatistics.Common.Networking
             }
 
             StatisticsPacketType packetType = (StatisticsPacketType)reader.ReadByte();
+            if (packetType >= StatisticsPacketType.MagicStorageHello && packetType <= StatisticsPacketType.MagicStorageAbort)
+            {
+                MagicStorageCraftingSystem.HandleConfirmationPacket(packetType, reader, whoAmI);
+                return;
+            }
             if (packetType >= StatisticsPacketType.ImproveGameHello && packetType <= StatisticsPacketType.NativeLiquidCommit)
             {
                 ImproveGameMultiplayerSystem.HandlePacket(packetType, reader, whoAmI);

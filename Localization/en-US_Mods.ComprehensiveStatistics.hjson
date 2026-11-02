@@ -8,6 +8,30 @@ UI: {
 		Hold right-click to drag this button
 		'''
 	CloseButtonTooltip: Close
+
+	CraftingCompatibility: {
+		Title: Magic Storage: crafting statistics
+		Version: Loaded version: {0}
+		NotInstalled: Magic Storage is not loaded.
+		Unsupported: Requires Magic Storage 0.7.0.11 or later.
+		Unavailable: Crafting integration is currently unavailable.
+		SinglePlayer: Single-player: tracks successful production.
+		Waiting: Multiplayer: checking server support...
+		ServerUnavailable: Multiplayer: server support is unconfirmed; storage crafting counts are disabled.
+		NoCommon: Multiplayer: no shared crafting statistics capability.
+		Ready: Multiplayer: server success confirmation is enabled.
+		Normal: Standard and batch crafting: {0}
+		Recursive: Full recursive chains: {0}
+		Enabled: Enabled
+		Disabled: Disabled
+		Pending: Waiting for server
+		HoldShift: Hold Shift for more information
+		ChainRule: Recursion counts all newly produced intermediates; existing stock is not counted again.
+		MultiplayerRule: Both sides must update this mod; only server-confirmed successful crafts are recorded.
+		HistoryRule: Previews, failures and rollbacks do not count. Expired or disconnected unconfirmed crafts are not recovered; existing records are retained.
+		PendingCount: Crafts awaiting confirmation: {0}
+	}
+
 	StatisticsStartedAt: Statistics started: {0:g}
 	StatisticsStartUnavailable: Statistics start time is unavailable outside a world.
 
@@ -155,6 +179,8 @@ UI: {
 	Items: {
 		CombinedGroup: Item statistics
 		PickupUnitsColumn: Units picked up
+		CraftedUnitsColumn: Crafted
+		CraftedUnitsTooltip: Items successfully produced by crafting; multi-item outputs count their actual quantity.
 		UseEventsColumn: Uses
 		DiscardUnitsColumn: Units discarded
 		AmmoExpectedUnitsColumn: Expected use

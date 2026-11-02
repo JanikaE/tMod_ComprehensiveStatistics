@@ -391,6 +391,9 @@ namespace ComprehensiveStatistics.Common.UI
             if (selectedTabIndex == BlocksTabIndex && compatibilityInfoButton.IsMouseHovering)
                 UICommon.TooltipMouseText(ImproveGameCompatibilityText.Format(ImproveGameMultiplayerSystem.GetDisplayStatus(),
                     Main.keyState.IsKeyDown(Keys.LeftShift) || Main.keyState.IsKeyDown(Keys.RightShift)));
+            else if (selectedTabIndex == ItemsTabIndex && compatibilityInfoButton.IsMouseHovering)
+                UICommon.TooltipMouseText(MagicStorageCraftingSystem.GetCompatibilityText(
+                    Main.keyState.IsKeyDown(Keys.LeftShift) || Main.keyState.IsKeyDown(Keys.RightShift)));
             else if (closeButton.IsMouseHovering)
                 UICommon.TooltipMouseText(Language.GetTextValue("Mods.ComprehensiveStatistics.UI.CloseButtonTooltip"));
             else if (GetActiveStatisticsList()?.HoveredMetricTooltip is string metricTooltip)
@@ -749,7 +752,7 @@ namespace ComprehensiveStatistics.Common.UI
             float titleWidth = FontAssets.MouseText.Value.MeasureString(titleText).X * 1.08f;
             float descriptionLeft = titleWidth + 18f;
             float headerButtonsWidth = ExpandCollapseButtonWidth + 12f;
-            if (selectedTabIndex == BlocksTabIndex)
+            if (selectedTabIndex == BlocksTabIndex || selectedTabIndex == ItemsTabIndex)
             {
                 headerButtonsWidth += CompatibilityButtonWidth + CompatibilityButtonGap;
                 if (compatibilityInfoButton.Parent == null) contentPanel.Append(compatibilityInfoButton);
@@ -2868,12 +2871,13 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 将一个统计范围中的物品拾取、使用与丢弃明细转换为按物品类型展示的列表分组。
+        /// 将一个统计范围中的物品拾取、合成、使用与丢弃明细转换为按物品类型展示的列表分组。
         /// </summary>
         private static IEnumerable<StatisticsListGroup> CreateItemGroups(StatisticsData data)
         {
             Dictionary<StableContentKey, StatisticMetrics> metricsByItem =
                 new Dictionary<StableContentKey, StatisticMetrics>();
+            Dictionary<StableContentKey, long> craftsByItem = new();
             if (data != null)
             {
                 foreach (KeyValuePair<StatisticKey, StatisticMetrics> pair in data.Entries)
@@ -2883,7 +2887,12 @@ namespace ComprehensiveStatistics.Common.UI
                         continue;
                     }
 
-                    if (string.Equals(
+                    if (pair.Key.StatisticId == StatisticKeys.ItemCraftStatisticId && pair.Value.Units > 0L)
+                    {
+                        craftsByItem[pair.Key.Content.Value] = pair.Value.Units;
+                        AddItemMetrics(metricsByItem, pair.Key.Content.Value, default);
+                    }
+                    else if (string.Equals(
                         pair.Key.StatisticId,
                         StatisticKeys.ItemPickupStatisticId,
                         StringComparison.Ordinal)
@@ -2926,7 +2935,8 @@ namespace ComprehensiveStatistics.Common.UI
                     pair.Key,
                     pickupUnits: pair.Value.Units,
                     useEvents: pair.Value.Events,
-                    discardUnits: pair.Value.Amount));
+                    discardUnits: pair.Value.Amount,
+                    craftedUnits: craftsByItem.GetValueOrDefault(pair.Key)));
             }
 
             return new[]
@@ -3186,7 +3196,7 @@ namespace ComprehensiveStatistics.Common.UI
         }
 
         /// <summary>
-        /// 将同一物品的拾取数量、使用次数与丢弃数量合并到一个三列展示值中。
+        /// 将同一物品的拾取数量、使用次数与丢弃数量合并，合成数量独立汇入第四列。
         /// </summary>
         private static void AddItemMetrics(
             IDictionary<StableContentKey, StatisticMetrics> metricsByItem,
@@ -3204,7 +3214,8 @@ namespace ComprehensiveStatistics.Common.UI
             StableContentKey content,
             long pickupUnits,
             long useEvents,
-            long discardUnits)
+            long discardUnits,
+            long craftedUnits)
         {
             bool resolved = content.TryResolveItemType(out int itemType);
             StatisticsContentSource source = GetContentSource(content);
@@ -3227,6 +3238,7 @@ namespace ComprehensiveStatistics.Common.UI
                 events: useEvents,
                 units: pickupUnits,
                 amount: discardUnits,
+                craftedUnits: craftedUnits,
                 source: source,
                 iconKind: resolved ? StatisticsIconKind.Item : StatisticsIconKind.None,
                 content: content,

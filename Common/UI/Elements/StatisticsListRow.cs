@@ -53,6 +53,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
         private readonly UIText unitsText;
         private readonly UIText valueText;
         private readonly UIText rateText;
+        private readonly UIText craftedText;
         private readonly UIText[] economyCoinTexts = new UIText[4];
         private readonly long[] economyCoinValues = new long[4];
         private Action clickAction;
@@ -114,6 +115,12 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             valueText.VAlign = 0.5f;
             Append(valueText);
 
+            craftedText = new UIText(string.Empty, 0.76f);
+            craftedText.Left.Set(-236f, 0f);
+            craftedText.HAlign = 1f;
+            craftedText.VAlign = 0.5f;
+            Append(craftedText);
+
             rateText = new UIText(string.Empty, 0.76f);
             rateText.Left.Set(-4f, 0f);
             rateText.HAlign = 1f;
@@ -143,6 +150,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long totalAmount,
             long totalRateUnits,
             long totalRateAmount,
+            long totalCraftedUnits,
             int groupIconType,
             Asset<Texture2D> groupIcon,
             StatisticsIconKind groupIconKind,
@@ -182,7 +190,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 totalRateAmount,
                 metricDisplay,
                 amountIconType,
-                amountIcon);
+                amountIcon,
+                totalCraftedUnits);
             SetMetricColors(
                 totalUnits,
                 totalEvents,
@@ -191,6 +200,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 metricDisplay,
                 new Color(238, 241, 255),
                 DimmedGroupMetricColor);
+            craftedText.TextColor = totalCraftedUnits == 0L ? DimmedGroupMetricColor : new Color(238, 241, 255);
         }
 
         /// <summary>
@@ -226,7 +236,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 item.RateAmount,
                 metricDisplay,
                 item.AmountIconType,
-                item.AmountIcon);
+                item.AmountIcon,
+                item.CraftedUnits);
             SetMetricColors(
                 item.Units,
                 item.Events,
@@ -235,6 +246,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 metricDisplay,
                 new Color(190, 200, 225),
                 DimmedItemMetricColor);
+            craftedText.TextColor = item.CraftedUnits == 0L ? DimmedItemMetricColor : new Color(190, 200, 225);
         }
 
         /// <summary>
@@ -253,6 +265,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             unitsText.SetText(string.Empty);
             valueText.SetText(string.Empty);
             rateText.SetText(string.Empty);
+            craftedText.SetText(string.Empty);
             HideEconomyCoins();
             icon = null;
             tileIconLayout = null;
@@ -558,7 +571,7 @@ namespace ComprehensiveStatistics.Common.UI.Elements
                 StatisticsMetricDisplay.Mixed => MixedNameRightReserve,
                 StatisticsMetricDisplay.WiringActivity => MixedNameRightReserve,
                 StatisticsMetricDisplay.LiquidVolume => MixedNameRightReserve,
-                StatisticsMetricDisplay.ItemActivity => ItemActivityNameRightReserve,
+                StatisticsMetricDisplay.ItemActivity => 486f,
                 StatisticsMetricDisplay.AmmoActivity => ItemActivityNameRightReserve,
                 StatisticsMetricDisplay.FishingActivity => MixedNameRightReserve,
                 StatisticsMetricDisplay.FishingEvents => MixedNameRightReserve,
@@ -581,7 +594,8 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             long rateAmount,
             StatisticsMetricDisplay metricDisplay,
             int amountIconType,
-            Asset<Texture2D> amountIcon)
+            Asset<Texture2D> amountIcon,
+            long craftedUnits)
         {
             HideEconomyCoins();
             showLiquidTooltip = metricDisplay == StatisticsMetricDisplay.LiquidVolume;
@@ -591,9 +605,11 @@ namespace ComprehensiveStatistics.Common.UI.Elements
             unitsText.Left.Set(-ItemActivityUseEventsRight, 0f);
             valueText.Left.Set(-4f, 0f);
             rateText.SetText(string.Empty);
+            craftedText.SetText(string.Empty);
             if (metricDisplay == StatisticsMetricDisplay.ItemActivity)
             {
-                eventsText.Left.Set(-ItemActivityPickupUnitsRight, 0f);
+                craftedText.SetText(craftedUnits.ToString("N0"));
+                eventsText.Left.Set(-352f, 0f);
                 eventsText.SetText(units.ToString("N0"));
                 unitsText.SetText(events.ToString("N0"));
                 valueText.SetText(amount.ToString("N0"));
