@@ -108,3 +108,11 @@
 ### 代码导航与维护
 
 实现入口：`Common/Systems/MagicStorageCraftingSystem.cs`、`MagicStorageRecursion.cs`、`MagicStorageMultiplayer.cs`、`MagicStorageCompatibilityText.cs`；有界模型为 `Common/Networking/MagicStorageConfirmation.cs`。物品页 `?` 显示两项能力及协商状态，按 Shift 查看口径和等待确认数。程序集审计、真实 Hook 安装及隔离场景运行方式见 [MagicStorage 检查](Tests/MagicStorageChecks/README.md)。
+
+## AutoReroll（自动重铸）
+
+- 本机基准为 AutoReroll 2024.8.31；适配该模组提供的前缀列表重铸窗口。可选安装，按实际实例方法及槽位字段签名检测，失败仅关闭本兼容并记录日志，不影响原版统计。
+- 对 GadgetBox.GadgetUI.ReforgeMachineUI.ReforgeItem(bool) 的每次真实操作绑定 reforgeSlot.item；StatisticsReforgeSystem 在该作用域内优先使用自定义槽位，捕获 Player.BuyItem(long, int) 返回成功的实际铜币费用。仍由标准 PostReforge 消费既有快照一次，允许上游在重铸时克隆物品；不额外提交第二份次数或支出。
+- 手动按钮 OnReforgeButtonClick 和自动连续重铸 Update 共用该叶子；安装叶子后重建两个调用方，避免预编译内联绕过作用域。离开单次操作或异常时清除未消费付款；上游枚举前缀会主动调用 PostReforge，预览入口不建立付费作用域。
+- 单人与多人均沿用本地角色的原版重铸归属，不增加网络协议或服务器统计。只统计实际成功的金币重铸，不记录特殊货币、预览、失败扣款和历史漏计；Calamitas 附魔、重铸退款等其他机制不在本次适配范围。
+- 实现为 Common/Systems/AutoRerollCompatibilitySystem.cs、StatisticsReforgeSystem.cs 及既有 StatisticsPlayer 快照消费者。真实入口审计、隔离回归与游戏验收见 [自动重铸检查](Tests/AutoRerollChecks/README.md)。

@@ -20,7 +20,7 @@ namespace ComprehensiveStatistics.Common.Systems
         }
 
         /// <summary>
-        /// 在原版确认并完成扣款后保存精确价格；普通商店和特殊货币购买不进入此路径。
+        /// 在真实重铸完成扣款后保存精确价格；普通商店和特殊货币购买不进入此路径。
         /// </summary>
         private static bool HandleBuyItem(
             On_Player.orig_BuyItem orig,
@@ -28,17 +28,18 @@ namespace ComprehensiveStatistics.Common.Systems
             long price,
             int customCurrency)
         {
+            Item reforgeItem = AutoRerollCompatibilitySystem.ActiveItem ?? Main.reforgeItem;
             bool isCoinReforge = customCurrency == -1
-                && Main.InReforgeMenu
+                && (AutoRerollCompatibilitySystem.ActiveItem != null || Main.InReforgeMenu)
                 && player != null
                 && player.whoAmI == Main.myPlayer
-                && Main.reforgeItem != null
-                && !Main.reforgeItem.IsAir;
+                && reforgeItem != null
+                && !reforgeItem.IsAir;
             bool paid = orig(player, price, customCurrency);
             if (paid && isCoinReforge)
             {
                 player.GetModPlayer<StatisticsPlayer>()
-                    .ObserveReforgePayment(Main.reforgeItem, price);
+                    .ObserveReforgePayment(reforgeItem, price);
             }
 
             return paid;

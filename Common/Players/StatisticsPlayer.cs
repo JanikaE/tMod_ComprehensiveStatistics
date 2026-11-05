@@ -733,7 +733,7 @@ namespace ComprehensiveStatistics.Common.Players
         }
 
         /// <summary>
-        /// 保存原版重铸扣款成功时的物品和实际铜币费用，等待成功回调提交。
+        /// 保存已识别重铸扣款成功时的物品和实际铜币费用，等待成功回调提交。
         /// </summary>
         internal void ObserveReforgePayment(Item item, long price)
         {
@@ -1031,7 +1031,7 @@ namespace ComprehensiveStatistics.Common.Players
         /// <summary>
         /// 清除只允许在一次同步重铸调用链内存在的扣款快照。
         /// </summary>
-        private void ClearPendingReforge()
+        internal void ClearPendingReforge()
         {
             hasPendingReforge = false;
             pendingReforge = default;

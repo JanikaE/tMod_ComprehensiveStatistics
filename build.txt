@@ -1,4 +1,4 @@
 displayName = 综合统计
 author = Janika
-version = 1.3.0
+version = 1.3.1
 buildIgnore = Tests/*
